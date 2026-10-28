@@ -52,7 +52,7 @@ installer/.copier-answers.yml      your answers, for copier update
 ```
 
 Both install scripts contain the same Python program, which does the work once the script has set
-up Python. [docs/design.md](docs/design.md) explains how they share it.
+up Python.
 
 Then:
 
@@ -92,9 +92,7 @@ HOME=$H sh installer/install.sh --uninstall
 ## Not covered
 
 The template makes no offline installer, no signed or notarised builds, and no macOS `.pkg` or
-`.dmg`. [docs/design.md](docs/design.md) explains why the installer works this way, compares it
-with other approaches, and describes what signing takes. Its last section lists the pinned versions
-to bump when maintaining the template.
+`.dmg`.
 
 ## License
 
