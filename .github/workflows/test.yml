@@ -1,0 +1,294 @@
+# Renders the template and checks the files, then installs napari-animation and a dummy PyTorch
+# plugin with the rendered scripts and setup .exe.
+
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # napari-launcher from its repository, so the template is tested against its latest code
+  NAPARI_ANIMATION_LAUNCHER: git+https://github.com/jeskowagner/napari-launcher
+  NAPARI_DUMMY_LAUNCHER: git+https://github.com/jeskowagner/napari-launcher
+  RENDER: >-
+    copier copy --defaults --vcs-ref HEAD -d dist=napari-animation -d widget=wizard
+    -d repo=example/napari-animation . sample
+  # a local plugin with a PyTorch dependency, a model download and a non-ASCII app name
+  RENDER_DUMMY: copier copy --defaults --vcs-ref HEAD --data-file tests/fixtures/napari-dummy.yml . dummy
+
+jobs:
+  render:
+    name: render and lint
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      # shellcheck and pwsh come with the runner image
+      - name: Install actionlint
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          bash <(curl -sSfL "https://raw.githubusercontent.com/rhysd/actionlint/v$ACTIONLINT_VERSION/scripts/download-actionlint.bash") \
+            "$ACTIONLINT_VERSION" "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Lint this repository's workflows
+        run: actionlint
+
+      - name: Test
+        run: uvx --with copier pytest -v --color=yes
+
+  scripts:
+    name: install script, ${{ matrix.platform }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Render the template
+        shell: bash
+        run: |
+          # shellcheck disable=SC2086  # split into its arguments
+          uvx $RENDER
+          echo "NAPARI_ANIMATION_HOME=$RUNNER_TEMP/plugin-install" >> "$GITHUB_ENV"
+
+      - uses: tlambert03/setup-qt-libs@v1.8
+
+      # the OpenGL of the Windows runners is too old for napari; this swaps in Mesa's software renderer
+      - name: Install Windows OpenGL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $script = Join-Path $env:RUNNER_TEMP install_opengl.ps1
+          Invoke-WebRequest -OutFile $script https://raw.githubusercontent.com/pyvista/gl-ci-helpers/d1c3a005634166a4acee81e8e0446e528ffbd0a9/appveyor/install_opengl.ps1
+          powershell -File $script
+
+      - name: Install (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: sh sample/installer/install.sh
+
+      # as the one-liner runs it, `irm <url> | iex`, in Windows PowerShell 5.1
+      - name: Install (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: Get-Content -Raw sample/installer/install.ps1 | Invoke-Expression
+
+      - name: Check that napari opens with the widget
+        uses: aganders3/headless-gui@v2.2
+        with:
+          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} sample/installer/smoke_test.py
+
+      - name: Uninstall (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: |
+          sh sample/installer/install.sh --uninstall
+          test ! -e "$NAPARI_ANIMATION_HOME"
+
+      # as the uninstall one-liner runs it
+      - name: Uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw sample/installer/install.ps1))) -Uninstall
+          if (Test-Path $env:NAPARI_ANIMATION_HOME) { throw 'install folder is still there' }
+          if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\napari-animation.lnk") { throw 'desktop shortcut is still there' }
+
+  # The runner images have libxcb-cursor0; a fresh Ubuntu desktop does not, so the script adds it.
+  # Ubuntu also comes without curl, so the script downloads uv with wget.
+  ubuntu-desktop:
+    name: install script, Ubuntu desktop libraries
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Install what Ubuntu desktop has, plus a virtual display
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq wget ca-certificates git xvfb xauth libglib2.0-0t64 libgl1 libgl1-mesa-dri \
+            libegl1 libfontconfig1 libdbus-1-3 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-shape0 libxcb-randr0 libxcb-xkb1 libxcb-xinput0
+          if dpkg -s libxcb-cursor0 > /dev/null 2>&1; then echo 'libxcb-cursor0 is installed'; exit 1; fi
+          if command -v curl; then echo 'curl is installed'; exit 1; fi
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Render the template
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # shellcheck disable=SC2086  # split into its arguments
+          uvx $RENDER
+
+      # the script comes through standard input, as with `wget -qO- <url> | sh`
+      - name: Install
+        run: sh < sample/installer/install.sh
+
+      - name: Check that napari opens with the widget
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/napari-animation/env/bin/python sample/installer/smoke_test.py
+
+  # CPU PyTorch, the model download, and a shortcut name that is not ASCII, which Windows PowerShell
+  # 5.1 reads correctly only because install.ps1 stays ASCII
+  torch-plugin:
+    name: PyTorch plugin with a model, ${{ matrix.platform }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+    env:
+      NAPARI_DUMMY_SPEC: ${{ github.workspace }}/tests/fixtures/napari-dummy
+      NAPARI_DUMMY_TORCH: cpu
+      NAPARI_DUMMY_MODEL: 1
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Render the template
+        shell: bash
+        run: |
+          # shellcheck disable=SC2086  # split into its arguments
+          uvx $RENDER_DUMMY
+          echo "NAPARI_DUMMY_HOME=$RUNNER_TEMP/plugin-install" >> "$GITHUB_ENV"
+
+      - uses: tlambert03/setup-qt-libs@v1.8
+
+      - name: Install Windows OpenGL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $script = Join-Path $env:RUNNER_TEMP install_opengl.ps1
+          Invoke-WebRequest -OutFile $script https://raw.githubusercontent.com/pyvista/gl-ci-helpers/d1c3a005634166a4acee81e8e0446e528ffbd0a9/appveyor/install_opengl.ps1
+          powershell -File $script
+
+      - name: Install (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sh dummy/installer/install.sh
+          test -f "$NAPARI_DUMMY_HOME/env/napari-dummy-model.pt"
+          test -f ~/.local/share/applications/Zellzählung.desktop
+
+      # as the setup .exe runs it
+      - name: Install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File dummy/installer/install.ps1
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path "$env:NAPARI_DUMMY_HOME\env\napari-dummy-model.pt")) { throw 'no model file' }
+          # the name from its character code, so the check does not depend on how this step is read
+          $lnk = "Zellz$([char]0xE4)hlung.lnk"
+          foreach ($folder in 'Programs', 'Desktop') {
+              $path = Join-Path ([Environment]::GetFolderPath($folder)) $lnk
+              if (-not (Test-Path -LiteralPath $path)) {
+                  Get-ChildItem ([Environment]::GetFolderPath($folder)) -Filter *.lnk | Out-Host
+                  throw "no shortcut $path"
+              }
+          }
+
+      - name: Check that napari opens with the widget
+        uses: aganders3/headless-gui@v2.2
+        with:
+          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} dummy/installer/smoke_test.py
+
+      - name: Uninstall (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sh dummy/installer/install.sh --uninstall
+          test ! -e "$NAPARI_DUMMY_HOME"
+          test ! -e ~/.local/share/applications/Zellzählung.desktop
+
+      - name: Uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File dummy/installer/install.ps1 -Uninstall
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit code $LASTEXITCODE" }
+          if (Test-Path $env:NAPARI_DUMMY_HOME) { throw 'install folder is still there' }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
+          if (Test-Path -LiteralPath $lnk) { throw 'desktop shortcut is still there' }
+
+  # the dummy plugin again, with the model download chosen as a setup task
+  windows-setup:
+    name: Windows setup .exe
+    runs-on: windows-latest
+    env:
+      NAPARI_DUMMY_SPEC: ${{ github.workspace }}/tests/fixtures/napari-dummy
+      NAPARI_DUMMY_TORCH: cpu
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Render and build the setup
+        shell: pwsh
+        run: |
+          uvx $($env:RENDER_DUMMY -split ' ')
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+              choco install innosetup -y --no-progress
+              $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6"
+          }
+          iscc /DAppVersion=1.0 dummy/installer/windows/napari-dummy.iss
+
+      # from PowerShell 7, so the setup's Windows PowerShell inherits PowerShell 7's module path
+      - name: Run the setup silently
+        shell: pwsh
+        run: |
+          $setup = Start-Process dummy/installer/windows/Output/napari-dummy-setup.exe -Wait -PassThru `
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=desktopicon,model', '/LOG=setup.log'
+          Get-Content setup.log -Tail 20
+          $root = "$env:LOCALAPPDATA\napari-dummy"
+          if ($setup.ExitCode -ne 0) {
+              Get-Content "$root\install.log" -ErrorAction SilentlyContinue
+              throw "setup failed with exit code $($setup.ExitCode)"
+          }
+          & "$root\env\Scripts\python.exe" -c "import napari, napari_launcher, napari_dummy"
+          if ($LASTEXITCODE -ne 0) { throw 'the installed environment does not work' }
+          if (-not (Test-Path "$root\env\napari-dummy-model.pt")) { throw 'no model file' }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
+          if (-not (Test-Path -LiteralPath $lnk)) {
+              Get-ChildItem ([Environment]::GetFolderPath('Desktop')) -Filter *.lnk | Out-Host
+              throw "no shortcut $lnk"
+          }
+
+      - name: Uninstall silently
+        shell: pwsh
+        run: |
+          $root = "$env:LOCALAPPDATA\napari-dummy"
+          Start-Process "$root\unins000.exe" -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES'
+          # the uninstaller finishes deleting itself in the background
+          for ($i = 0; ($i -lt 60) -and (Test-Path $root); $i++) { Start-Sleep 1 }
+          if (Test-Path $root) { throw 'install folder is still there' }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
+          if (Test-Path -LiteralPath $lnk) { throw 'desktop shortcut is still there' }

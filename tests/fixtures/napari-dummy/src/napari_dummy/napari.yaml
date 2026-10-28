@@ -1,0 +1,11 @@
+name: napari-dummy
+display_name: Dummy
+contributions:
+  commands:
+    - id: napari-dummy.count
+      python_name: napari_dummy:count_widget
+      title: Count
+  widgets:
+    - command: napari-dummy.count
+      display_name: Count
+      autogenerate: true

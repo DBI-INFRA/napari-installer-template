@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "napari-dummy"
+version = "0.1.0"
+description = "A napari plugin with a PyTorch dependency, for testing the installers"
+requires-python = ">=3.10"
+dependencies = ["torch"]
+
+[project.entry-points."napari.manifest"]
+napari-dummy = "napari_dummy:napari.yaml"

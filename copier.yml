@@ -1,0 +1,193 @@
+_min_copier_version: "9.0"
+_subdirectory: template
+_answers_file: installer/.copier-answers.yml
+_templates_suffix: .jinja
+# GitHub Actions (${{ }}) and Inno Setup ({{) both use curly braces
+_envops:
+  block_start_string: "[%"
+  block_end_string: "%]"
+  variable_start_string: "[["
+  variable_end_string: "]]"
+  comment_start_string: "[#"
+  comment_end_string: "#]"
+  keep_trailing_newline: true
+  trim_blocks: true
+  lstrip_blocks: true
+
+_message_after_copy: |
+  The installer files are in installer/ and .github/workflows/installer.yml.
+
+  Next:
+  - Put the instructions from installer/README.md in the plugin's README, or link to that file.
+  - Commit the files, then open a pull request or push to [[ branch ]]. Either runs the
+    installer workflow, which tests the scripts on Windows, macOS and Linux and builds the
+    setup .exe.
+  - Keep the repository public. The install commands download the scripts from it.
+  - Push a v* tag to attach the setup .exe to the GitHub release.
+  - Later, run `copier update -a installer/.copier-answers.yml` to bring in fixes to the template.
+
+dist:
+  type: str
+  help: The plugin's name on PyPI, as in `pip install <name>`.
+  validator: >-
+    [% if not (dist | regex_search('^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$')) %]
+    not a valid distribution name
+    [% elif dist | regex_search('^[0-9]') %]
+    must start with a letter, as the names of the install scripts' environment variables do
+    [% endif %]
+
+plugin:
+  type: str
+  help: The plugin's npe2 name, the `name:` field in napari.yaml. It is usually the PyPI name.
+  default: "[[ dist ]]"
+  validator: >-
+    [% if not (plugin | regex_search('^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$')) %]
+    not a valid plugin name
+    [% endif %]
+
+widget:
+  type: str
+  help: >-
+    Display name of the widget to dock, as shown in napari's Plugins menu. Leave empty to dock
+    the plugin's first widget, or enter __all__ for all of them.
+  default: ""
+  validator: >-
+    [% if widget | regex_search('[\'"`$\\\\{}%]') %]
+    must not contain quotes, $, `, \, %, or braces
+    [% endif %]
+
+app_name:
+  type: str
+  help: Name of the shortcut, the Start menu entry and the Windows setup.
+  default: "[[ dist ]]"
+  validator: >-
+    [% if not app_name or app_name | regex_search('[\'"`$\\\\{}%/:*?<>|]') %]
+    must not be empty or contain quotes, $, `, \, %, /, :, *, ?, <, >, | or braces
+    [% elif app_name | regex_search('^[\\s.]|[\\s.]$') %]
+    must not start or end with a space or a dot
+    [% elif app_name | regex_search('^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?$') %]
+    is a device name on Windows
+    [% endif %]
+
+comment:
+  type: str
+  help: A one-line description, shown with the shortcut.
+  default: "[[ app_name ]] in napari"
+  validator: >-
+    [% if not comment or comment | regex_search('[\'"`$\\\\{}%]') %]
+    must not be empty or contain quotes, $, `, \, %, or braces
+    [% endif %]
+
+repo:
+  type: str
+  help: >-
+    The GitHub repository, as owner/name. The install commands download the scripts from it,
+    so it must be public.
+  validator: >-
+    [% if not (repo | regex_search('^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$')) %]
+    must be owner/name
+    [% endif %]
+
+branch:
+  type: str
+  help: >-
+    The branch that the install commands download the scripts from. The installer workflow
+    also runs on every push to it.
+  default: main
+  validator: >-
+    [% if not (branch | regex_search('^[A-Za-z0-9_][A-Za-z0-9_./-]*$')) or '..' in branch %]
+    must be a branch name of letters, digits and _ . / -
+    [% endif %]
+
+torch:
+  type: bool
+  help: >-
+    Does the plugin need PyTorch, directly or through a dependency such as cellpose or micro-sam?
+    To check, run `uv pip compile pyproject.toml | grep -i '^torch'`.
+  default: false
+
+model_command:
+  type: str
+  help: >-
+    Arguments to the installed Python that download the model weights, for example
+    `-m napari_foo fetch-model`. The installers offer to run it. It must exit with a non-zero
+    code if the download fails. Leave empty if there is nothing to download.
+  default: ""
+  validator: >-
+    [% if model_command and not (model_command | regex_search('^[A-Za-z0-9_.=:/ -]+$')) %]
+    may only contain letters, digits, spaces and _ . = : / -
+    [% endif %]
+
+model_desc:
+  type: str
+  help: >-
+    What the command downloads, as the installers should name it, for example
+    "the Foo model (about 300 MB)".
+  when: "[[ model_command != '' ]]"
+  validator: >-
+    [% if model_command and not model_desc %]
+    needed with model_command
+    [% elif model_desc | regex_search('[\'"`$\\\\{}%]') %]
+    must not contain quotes, $, `, \, %, or braces
+    [% endif %]
+
+shortcut_icon:
+  type: str
+  help: >-
+    Icon for the shortcut, a .png inside the plugin package, written as `package:path/in/package`.
+    Leave empty for napari's icon.
+  default: ""
+  validator: >-
+    [% if shortcut_icon | regex_search('[\'"`$\\\\{}%\\s]') %]
+    must not contain quotes, $, `, \, %, whitespace or braces
+    [% endif %]
+
+setup_icon:
+  type: str
+  help: >-
+    Icon for the Windows setup, the path of an .ico file in this repository. Leave empty for
+    napari's icon.
+  default: ""
+  validator: >-
+    [% if setup_icon and not (setup_icon | regex_search('^[A-Za-z0-9_./-]+\\.ico$')) %]
+    must be a relative path to an .ico file, without spaces
+    [% endif %]
+
+app_id:
+  type: str
+  help: >-
+    Windows AppId of the setup. Keep the default for a new installer. If you already ship an
+    Inno Setup installer, enter its AppId so the new setup upgrades it.
+  default: "[[ ('napari-installer-template:' ~ repo ~ ':' ~ dist) | to_uuid | upper ]]"
+  validator: >-
+    [% if not (app_id | regex_search('^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$')) %]
+    must be an upper-case GUID without braces
+    [% endif %]
+
+# not asked or stored, so `copier update` brings in new values
+env:
+  type: str
+  default: "[[ dist | regex_replace('[^A-Za-z0-9]+', '_') | upper ]]"
+  when: false
+
+uv_version:
+  type: str
+  # renovate: datasource=github-releases depName=astral-sh/uv
+  default: "0.13.6"
+  when: false
+
+# sha256 of uv-x86_64-pc-windows-msvc.zip of that release, which also runs on Windows on Arm
+uv_windows_sha256:
+  type: str
+  default: a2a8820d5eea32f08ef467ef3b7f66883a9b076d5737a2fc2fbb5f458d1bb50f
+  when: false
+
+python_version:
+  type: str
+  default: "3.12"
+  when: false
+
+launcher_spec:
+  type: str
+  default: napari-launcher>=0.1,<0.2
+  when: false

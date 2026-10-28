@@ -1,0 +1,156 @@
+[# Windows PowerShell reads a .ps1 without a byte order mark in the ANSI code page, and `irm | iex` fails on
+   one with a byte order mark, so the script stays ASCII: the answers in the Python step are JSON, with \uXXXX for other characters. #]
+[% set url = 'https://raw.githubusercontent.com/' ~ repo ~ '/' ~ branch ~ '/installer/install.ps1' %]
+[% if torch %]
+# Install napari and [[ dist ]] (Windows) into a folder of their own,
+# with the PyTorch build that fits this machine's GPU, and add Start menu and desktop shortcuts.
+[% else %]
+# Install napari and [[ dist ]] (Windows) into a folder of their own,
+# and add Start menu and desktop shortcuts.
+[% endif %]
+#
+#   powershell -ExecutionPolicy ByPass -c "irm [[ url ]] | iex"
+#
+# Run it again to update. To uninstall:
+#
+#   powershell -ExecutionPolicy ByPass -c "& ([scriptblock]::Create((irm [[ url ]]))) -Uninstall"
+#
+# or run a saved copy of this script with -Uninstall.
+#
+# Environment variables:
+#   [[ env ]]_HOME      install folder (default: %LOCALAPPDATA%\[[ dist ]]); -Root takes precedence
+#   [[ env ]]_SPEC      what to install (default: [[ dist ]]),
+#                       e.g. a version pin, a wheel or a git URL
+[% if torch %]
+#   [[ env ]]_TORCH     PyTorch build (default: auto), e.g. cpu or cu128
+[% endif %]
+#   [[ env ]]_NO_DESKTOP=1  add the Start menu entry only, no desktop icon (or -NoDesktop)
+[% if model_command %]
+#   [[ env ]]_MODEL=1 or 0  download the model now, or not (or -Model yes/no);
+#                       without it, the script asks when run in a console and skips it otherwise
+[% endif %]
+#   [[ env ]]_LAUNCHER  what provides the shortcuts (default: [[ launcher_spec ]])
+#
+# -PauseOnError keeps the window open after a failure, for runs from the setup .exe
+#
+# Made with napari-installer-template; update with `copier update -a installer/.copier-answers.yml`.
+[% if model_command %]
+param([string]$Root, [switch]$Uninstall, [switch]$NoDesktop, [switch]$PauseOnError,
+      [ValidateSet('ask', 'yes', 'no')][string]$Model = 'ask')
+[% else %]
+param([string]$Root, [switch]$Uninstall, [switch]$NoDesktop, [switch]$PauseOnError)
+[% endif %]
+
+# Windows PowerShell started from PowerShell 7 inherits its module path, then loads PowerShell 7's
+# modules and fails ("The member ... is already present"); keep only its own paths
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    $env:PSModulePath = (($env:PSModulePath -split ';') -notmatch '\\PowerShell\\') -join ';'
+}
+
+$ErrorActionPreference = 'Stop'
+function Exit-Install($code) {
+    try { Stop-Transcript | Out-Null } catch {}
+    if ($PauseOnError) { Read-Host 'Press Enter to close' }
+    exit $code
+}
+trap {
+    Write-Host "error: $_" -ForegroundColor Red
+    Exit-Install 1
+}
+# Invoke-WebRequest is many times slower with its progress bar on
+$ProgressPreference = 'SilentlyContinue'
+# GitHub needs TLS 1.2, which older .NET Framework versions leave off
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+$UvVersion = '[[ uv_version ]]'
+$UvSha256 = '[[ uv_windows_sha256 ]]'
+$PythonVersion = '[[ python_version ]]'
+if (-not $Root) { $Root = if ($env:[[ env ]]_HOME) { $env:[[ env ]]_HOME } else { Join-Path $env:LOCALAPPDATA '[[ dist ]]' } }
+# absolute, as .NET methods take it
+$Root = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root)
+# marks a folder this script made, so uninstalling never deletes anything else
+$MarkerName = '.[[ dist ]]-install'
+$Marker = Join-Path $Root $MarkerName
+$Uv = Join-Path $Root 'bin\uv.exe'
+$Python = Join-Path $Root 'env\Scripts\python.exe'
+$Step = Join-Path $Root 'install-step.py'
+
+# the rest of the work, shared with install.sh, runs in the environment's Python
+$StepCode = @'
+[% include 'include/install_step.py' %]
+'@
+
+function Say($message) { Write-Host "==> $message" -ForegroundColor Cyan }
+
+# native commands do not stop the script on failure by themselves
+function Run {
+    & $args[0] @($args | Select-Object -Skip 1)
+    if ($LASTEXITCODE -ne 0) { throw "$($args[0]) failed with exit code $LASTEXITCODE" }
+}
+
+if ($Uninstall) {
+    if (-not (Test-Path -LiteralPath $Marker)) { throw "$Root is not a [[ dist ]] install" }
+    # removes the shortcuts, or says to delete them by hand
+    if (Test-Path -LiteralPath $Python) {
+        [IO.File]::WriteAllText($Step, $StepCode)
+        & $Python -I -u $Step uninstall
+    }
+    # the marker goes last, so an uninstall that stops part-way can run again
+    try {
+        Get-ChildItem -LiteralPath $Root -Force | Where-Object { $_.Name -ne $MarkerName } | Remove-Item -Recurse -Force
+    } catch {
+        throw "could not delete everything in $Root ($_). Close napari, then uninstall again."
+    }
+    Remove-Item -LiteralPath $Marker -Force
+    Remove-Item -LiteralPath $Root -Force
+    Say "Removed $Root"
+    return
+}
+
+if ((Test-Path -LiteralPath $Root) -and -not (Test-Path -LiteralPath $Marker) -and
+    (Get-ChildItem -LiteralPath $Root -Force | Select-Object -First 1)) {
+    throw "$Root exists and was not made by this installer; set [[ env ]]_HOME to another folder"
+}
+
+[void][IO.Directory]::CreateDirectory($Root)
+[IO.File]::WriteAllText($Marker, '')
+# what the script says, and any error, also goes to install.log; uv's own output does not
+Start-Transcript -LiteralPath (Join-Path $Root 'install.log') | Out-Null
+
+# python, packages and their cache stay inside $Root, so deleting it removes everything
+$env:UV_PYTHON_INSTALL_DIR = Join-Path $Root 'python'
+$env:UV_CACHE_DIR = Join-Path $Root 'cache'
+$env:UV_NO_CONFIG = '1'
+
+if (-not (Test-Path -LiteralPath $Uv) -or ((& $Uv --version) -split ' ')[1] -ne $UvVersion) {
+    Say "Downloading uv $UvVersion"
+    # the x64 build, which Windows on Arm also runs
+    $zip = Join-Path $Root 'uv.zip'
+    Invoke-WebRequest -UseBasicParsing -OutFile $zip `
+        "https://github.com/astral-sh/uv/releases/download/$UvVersion/uv-x86_64-pc-windows-msvc.zip"
+    if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $UvSha256) {
+        throw 'the uv download does not match its checksum'
+    }
+    Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $Root 'bin') -Force
+    Remove-Item -LiteralPath $zip
+}
+
+Say "Installing Python $PythonVersion"
+# --no-bin, --no-registry: Python stays private to this install, off PATH and the py launcher
+Run $Uv python install --no-bin --no-registry $PythonVersion
+# --seed: pip, which napari's plugin manager installs other plugins with
+Run $Uv venv --quiet --allow-existing --seed --managed-python --python $PythonVersion (Join-Path $Root 'env')
+
+# the packages, the shortcuts, the model and the closing message; the step writes its own messages to
+# install.log, so the transcript stops first and leaves the file to it
+$StepArgs = @()
+if ($NoDesktop) { $StepArgs += '--no-desktop' }
+[% if model_command %]
+if ($Model -ne 'ask') { $StepArgs += @('--model', $Model) }
+[% endif %]
+Stop-Transcript | Out-Null
+[IO.File]::WriteAllText($Step, $StepCode)
+& $Python -I -u $Step install @StepArgs
+$code = $LASTEXITCODE
+Remove-Item -LiteralPath $Step
+if ($code -ne 0) { Exit-Install $code }

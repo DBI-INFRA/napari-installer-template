@@ -1,0 +1,116 @@
+[[ '\ufeff' ]]; Setup .exe for Windows: a small online installer that runs install.ps1, which downloads Python,
+[% if torch %]
+; napari, [[ dist ]] and the PyTorch build for this machine's GPU.
+[% else %]
+; napari and [[ dist ]].
+[% endif %]
+;
+;   iscc installer\windows\[[ dist ]].iss    (writes installer\windows\Output\)
+;
+; Made with napari-installer-template; update with `copier update -a installer/.copier-answers.yml`.
+; This file is UTF-8 with a byte order mark, which Inno Setup needs to read non-ASCII names.
+[% set icon = ('..\\..\\' ~ setup_icon | replace('/', '\\')) if setup_icon else 'icon.ico' %]
+[% set with_args = '-w ' ~ plugin ~ (' ""' ~ widget ~ '""' if widget else '') %]
+
+#define AppName "[[ app_name ]]"
+#ifndef AppVersion
+  #define AppVersion "0"
+#endif
+
+[Setup]
+AppId={{[[ app_id ]]}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppPublisher=[[ dist ]] contributors
+AppPublisherURL=https://github.com/[[ repo ]]
+; per user, no admin rights: napari's plugin manager writes into the install
+PrivilegesRequired=lowest
+DefaultDirName={localappdata}\[[ dist ]]
+DisableDirPage=yes
+DisableProgramGroupPage=yes
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputBaseFilename=[[ dist ]]-setup
+SetupIconFile=[[ icon ]]
+UninstallDisplayIcon={app}\icon.ico
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a &desktop icon"
+[% if model_command %]
+Name: "model"; Description: "Download [[ model_desc ]] &now, instead of the first time the plugin needs it"
+[% endif %]
+
+[Files]
+Source: "..\install.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "[[ icon ]]"; DestDir: "{app}"; DestName: "icon.ico"; Flags: ignoreversion
+[% if not setup_icon %]
+; napari's license, which covers icon.ico
+Source: "icon-license.txt"; DestDir: "{app}"; Flags: ignoreversion
+[% endif %]
+
+[Run]
+Filename: "{app}\env\Scripts\pythonw.exe"; Parameters: "-m napari_launcher launch [[ with_args ]]"; \
+  Description: "Start {#AppName}"; Flags: postinstall nowait skipifsilent; Check: InstallSucceeded
+
+[UninstallRun]
+Filename: "{app}\env\Scripts\python.exe"; Parameters: "-m napari_launcher shortcut remove --name ""{#AppName}"""; \
+  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "RemoveShortcuts"
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Code]
+var
+  InstallExitCode: Integer;
+
+function InstallSucceeded: Boolean;
+begin
+  Result := InstallExitCode = 0;
+end;
+
+{ the setup's own exit code, so silent installs can tell that install.ps1 failed }
+function GetCustomSetupExitCode: Integer;
+begin
+  Result := InstallExitCode;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+  Params: String;
+begin
+  if CurStep = ssInstall then
+  begin
+    { tells install.ps1 that this folder is its own }
+    ForceDirectories(ExpandConstant('{app}'));
+    SaveStringToFile(ExpandConstant('{app}\.[[ dist ]]-install'), '', False);
+  end;
+  if CurStep = ssPostInstall then
+  begin
+    Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\install.ps1') + '"' +
+      ' -Root "' + ExpandConstant('{app}') + '"';
+    if not WizardIsTaskSelected('desktopicon') then
+      Params := Params + ' -NoDesktop';
+[% if model_command %]
+    if WizardIsTaskSelected('model') then
+      Params := Params + ' -Model yes'
+    else
+      Params := Params + ' -Model no';
+[% endif %]
+    if not WizardSilent() then
+      Params := Params + ' -PauseOnError';
+    WizardForm.StatusLabel.Caption := 'Downloading and installing napari[[ ", " ~ dist ~ " and PyTorch" if torch else " and " ~ dist ]]. This takes a few minutes...';
+    { a visible console, so the download progress shows }
+    if not Exec('powershell.exe', Params, '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      ResultCode := -1;
+    InstallExitCode := ResultCode;
+    { install.ps1 writes why it stopped to install.log: a failed download, or shortcuts it could not add }
+    if ResultCode <> 0 then
+      SuppressibleMsgBox('Installing {#AppName} did not finish (exit code ' + IntToStr(ResultCode) + ').' + #13#10#13#10 +
+        'The end of ' + ExpandConstant('{app}\install.log') + ' says what went wrong. ' +
+        'If a download failed, check the internet connection. Then run the setup again.', mbError, MB_OK, IDOK);
+  end;
+end;

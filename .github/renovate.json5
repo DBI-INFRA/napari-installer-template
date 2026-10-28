@@ -1,0 +1,71 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', ':disableDependencyDashboard', 'schedule:monthly'],
+  enabledManagers: ['github-actions', 'custom.regex'],
+  semanticCommits: 'enabled',
+  semanticCommitType: 'ci',
+  semanticCommitScope: 'deps',
+  customManagers: [
+    {
+      customType: 'regex',
+      description: 'Values in copier.yml marked with a "# renovate:" comment, such as the uv version',
+      managerFilePatterns: ['/^copier\\.yml$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: "(?<currentValue>[^"]+)"',
+      ],
+    },
+    {
+      customType: 'regex',
+      description: 'actionlint release that CI downloads',
+      managerFilePatterns: ['/^\\.github/workflows/test\\.yml$/'],
+      matchStrings: ['ACTIONLINT_VERSION: (?<currentValue>\\S+)'],
+      datasourceTemplate: 'github-releases',
+      depNameTemplate: 'rhysd/actionlint',
+      extractVersionTemplate: '^v(?<version>.+)$',
+    },
+    {
+      customType: 'regex',
+      description: 'gl-ci-helpers commit of the Windows OpenGL script',
+      managerFilePatterns: [
+        '/^\\.github/workflows/test\\.yml$/',
+        '/^template/\\.github/workflows/installer\\.yml\\.jinja$/',
+      ],
+      matchStrings: ['https://raw\\.githubusercontent\\.com/pyvista/gl-ci-helpers/(?<currentDigest>[0-9a-f]{40})/'],
+      datasourceTemplate: 'git-refs',
+      depNameTemplate: 'pyvista/gl-ci-helpers',
+      packageNameTemplate: 'https://github.com/pyvista/gl-ci-helpers',
+      currentValueTemplate: 'master',
+    },
+  ],
+  'github-actions': {
+    managerFilePatterns: ['/^template/\\.github/workflows/.+\\.ya?ml\\.jinja$/'],
+  },
+  packageRules: [
+    {
+      description: 'CI dependencies in one pull request',
+      matchManagers: ['github-actions', 'custom.regex'],
+      matchDepNames: ['!astral-sh/uv'],
+      groupName: 'CI dependencies',
+      separateMajorMinor: false,
+    },
+    {
+      description: 'The generated workflow keeps floating major tags, so only a new major is proposed',
+      matchManagers: ['github-actions'],
+      matchFileNames: ['template/**'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'digest', 'pinDigest'],
+      enabled: false,
+    },
+    {
+      description: 'The Ubuntu container stands in for a fresh Ubuntu desktop and moves to a new LTS by hand',
+      matchDatasources: ['docker'],
+      enabled: false,
+    },
+    {
+      matchDepNames: ['astral-sh/uv'],
+      semanticCommitType: 'build',
+      prBodyNotes: [
+        'Update `uv_windows_sha256` in `copier.yml` to the hash in [uv-x86_64-pc-windows-msvc.zip.sha256](https://github.com/astral-sh/uv/releases/download/{{{newVersion}}}/uv-x86_64-pc-windows-msvc.zip.sha256). `test_uv_windows_sha256_matches_release` fails until it matches and prints the value.',
+      ],
+    },
+  ],
+}

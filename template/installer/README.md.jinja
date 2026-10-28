@@ -1,0 +1,99 @@
+[% set raw = 'https://raw.githubusercontent.com/' ~ repo ~ '/' ~ branch ~ '/installer' %]
+## Installer
+
+[% if torch %]
+The installer sets up napari and [[ dist ]] with the PyTorch build that fits your computer's graphics card (NVIDIA, AMD on Linux, or Apple silicon), or the CPU build if there is none.
+[% else %]
+The installer sets up napari and [[ dist ]].
+[% endif %]
+You do not need Python or conda. You need an internet connection while it runs.
+
+### Install on Windows
+
+Download `[[ dist ]]-setup.exe` from the [releases page](https://github.com/[[ repo ]]/releases) and run it.
+The setup is not code-signed, so Windows may show "Windows protected your PC".
+If it does, click **More info**, then **Run anyway**.
+
+You can also install without the setup. Open PowerShell and run:
+
+```
+powershell -ExecutionPolicy ByPass -c "irm [[ raw ]]/install.ps1 | iex"
+```
+
+### Install on macOS or Linux
+
+Open a terminal and run the command below. On macOS, the Terminal app is in Applications > Utilities.
+
+```
+curl -LsSf [[ raw ]]/install.sh | sh
+```
+
+If your Linux has no `curl`, as on a fresh Ubuntu, run this instead:
+
+```
+wget -qO- [[ raw ]]/install.sh | sh
+```
+
+[% if torch %]
+Recent versions of PyTorch do not support Macs with an Intel processor, so the installation may fail on those Macs.
+
+[% endif %]
+[% if model_command %]
+The installer offers to download [[ model_desc ]] straight away: the Windows setup has a tick box, and the terminal asks a question.
+
+[% endif %]
+### Where it goes
+
+Everything goes into one folder: `%LOCALAPPDATA%\[[ dist ]]` on Windows, and `~/.local/share/[[ dist ]]` on macOS and Linux.
+[% if torch %]
+With PyTorch, this folder can take several GB of disk space.
+[% endif %]
+On Windows, the installer writes a log to `install.log` in that folder. If the installation fails, the end of the log says why.
+
+### Start napari
+
+Start napari with the "[[ app_name ]]" shortcut.
+It is on your desktop, and also in the Start menu on Windows, in the Applications folder of your home folder on macOS, and in the app menu on Linux.
+napari opens with [[ dist ]] ready to use. The first start can be slow; later starts are quicker.
+
+### Update
+
+To update, run the install command again, or download and run the newest setup.
+
+### Uninstall
+
+If you installed with the setup, uninstall "[[ app_name ]]" in Windows Settings > Apps > Installed apps (on Windows 10, Apps & features).
+Otherwise, run the command for your system.
+
+On Windows, in PowerShell:
+
+```
+powershell -ExecutionPolicy ByPass -c "& ([scriptblock]::Create((irm [[ raw ]]/install.ps1))) -Uninstall"
+```
+
+On macOS or Linux, in a terminal:
+
+```
+curl -LsSf [[ raw ]]/install.sh | sh -s -- --uninstall
+```
+
+or, without `curl`:
+
+```
+wget -qO- [[ raw ]]/install.sh | sh -s -- --uninstall
+```
+
+### Advanced options
+
+[% if torch %]
+The top of each install script lists environment variables that change the install folder, the plugin version and the PyTorch build.
+[% else %]
+The top of each install script lists environment variables that change the install folder and the plugin version.
+[% endif %]
+
+If you already have a Python environment with [[ dist ]], you can add the same shortcut to it:
+
+```
+pip install napari-launcher
+napari-launcher shortcut add -w [[ plugin ]][% if widget %] "[[ widget ]]"[% endif %] --name "[[ app_name ]]"
+```
