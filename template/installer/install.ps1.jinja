@@ -24,7 +24,7 @@
 [% if torch %]
 #   [[ env ]]_TORCH     PyTorch build (default: auto), e.g. cpu or cu128
 [% endif %]
-#   [[ env ]]_NO_DESKTOP=1  add the Start menu entry only, no desktop icon (or -NoDesktop)
+#   [[ env ]]_NO_DESKTOP=1  add the Start menu entry only, no desktop shortcut (or -NoDesktop)
 [% if model_command %]
 #   [[ env ]]_MODEL=1 or 0  download the model now, or not (or -Model yes/no);
 #                       without it, the script asks when run in a console and skips it otherwise

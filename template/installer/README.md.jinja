@@ -2,7 +2,8 @@
 ## Installer
 
 [% if torch %]
-The installer sets up napari and [[ dist ]] with the PyTorch build that fits your computer's graphics card (NVIDIA, AMD on Linux, or Apple silicon), or the CPU build if there is none.
+The installer sets up napari and [[ dist ]], with the PyTorch build for your computer's graphics card (NVIDIA, AMD on Linux, or Apple silicon).
+If your computer has none of these, it installs the PyTorch build that runs on the processor (CPU).
 [% else %]
 The installer sets up napari and [[ dist ]].
 [% endif %]
@@ -11,10 +12,14 @@ You do not need Python or conda. You need an internet connection while it runs.
 ### Install on Windows
 
 Download `[[ dist ]]-setup.exe` from the [releases page](https://github.com/[[ repo ]]/releases) and run it.
+It is under **Assets** in the newest release.
 The setup is not code-signed, so Windows may show "Windows protected your PC".
 If it does, click **More info**, then **Run anyway**.
 
-You can also install without the setup. Open PowerShell and run:
+While the setup installs, a black window shows the download progress.
+Leave it open. It closes by itself when the installation is done.
+
+You can also install without the setup. Open PowerShell (search for it in the Start menu) and run:
 
 ```
 powershell -ExecutionPolicy ByPass -c "irm [[ raw ]]/install.ps1 | iex"
@@ -28,7 +33,7 @@ Open a terminal and run the command below. On macOS, the Terminal app is in Appl
 curl -LsSf [[ raw ]]/install.sh | sh
 ```
 
-If your Linux has no `curl`, as on a fresh Ubuntu, run this instead:
+If the terminal says `curl` is not found, as on a fresh Ubuntu, run this instead:
 
 ```
 wget -qO- [[ raw ]]/install.sh | sh
@@ -39,7 +44,8 @@ Recent versions of PyTorch do not support Macs with an Intel processor, so the i
 
 [% endif %]
 [% if model_command %]
-The installer offers to download [[ model_desc ]] straight away: the Windows setup has a tick box, and the terminal asks a question.
+The installer offers to download [[ model_desc ]] straight away: tick the box in the Windows setup, or answer the question in the terminal.
+If you skip this, [[ dist ]] downloads the model the first time it needs it.
 
 [% endif %]
 ### Where it goes
@@ -48,7 +54,6 @@ Everything goes into one folder: `%LOCALAPPDATA%\[[ dist ]]` on Windows, and `~/
 [% if torch %]
 With PyTorch, this folder can take several GB of disk space.
 [% endif %]
-On Windows, the installer writes a log to `install.log` in that folder. If the installation fails, the end of the log says why.
 
 ### Start napari
 
@@ -83,6 +88,13 @@ or, without `curl`:
 wget -qO- [[ raw ]]/install.sh | sh -s -- --uninstall
 ```
 
+### If something goes wrong
+
+If the installation stops with an error, check your internet connection and run the installer again.
+On Windows, the end of `install.log` in the install folder says what went wrong.
+On macOS and Linux, the error is in the last lines in the terminal.
+If it still fails, or napari does not start, report it on the [issues page](https://github.com/[[ repo ]]/issues) and include those lines.
+
 ### Advanced options
 
 [% if torch %]
@@ -91,7 +103,7 @@ The top of each install script lists environment variables that change the insta
 The top of each install script lists environment variables that change the install folder and the plugin version.
 [% endif %]
 
-If you already have a Python environment with [[ dist ]], you can add the same shortcut to it:
+If you already have a Python environment with [[ dist ]], you can make the same shortcut for it:
 
 ```
 pip install napari-launcher

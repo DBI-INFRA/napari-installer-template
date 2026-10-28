@@ -7,7 +7,7 @@ plugin repository, for people who have no Python.
 |---|---|---|
 | Windows | `<dist>-setup.exe` from the GitHub release, or a PowerShell one-liner | Start menu and desktop shortcuts; the setup also adds an entry in Settings > Apps |
 | macOS | `curl … install.sh \| sh` | `~/Applications/<name>.app` and a link to it on the desktop |
-| Linux | `curl … install.sh \| sh`, or the same with `wget` | an app menu entry and a desktop launcher |
+| Linux | `curl … install.sh \| sh`, or the same with `wget` | an app menu entry and a desktop shortcut |
 
 Each installer downloads a pinned [uv](https://docs.astral.sh/uv/) into a folder of its own. uv
 installs Python in that folder, then napari, the plugin from PyPI and
@@ -19,7 +19,7 @@ plugin's widget docked. Uninstalling deletes the folder and the shortcuts.
 The plugin needs no code changes, only a release on PyPI. The repository must be public, because
 the install commands download the scripts from `raw.githubusercontent.com`.
 
-## Use
+## Add the installer to a plugin
 
 From the plugin's repository root, run:
 

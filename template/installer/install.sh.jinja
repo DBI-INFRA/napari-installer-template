@@ -18,7 +18,7 @@
 [% if torch %]
 #   [[ env ]]_TORCH     PyTorch build (default: auto), e.g. cpu, cu128 or rocm6.4
 [% endif %]
-#   [[ env ]]_NO_DESKTOP=1  add the app menu entry only, no desktop icon
+#   [[ env ]]_NO_DESKTOP=1  add the app menu entry only, no desktop shortcut
 [% if model_command %]
 #   [[ env ]]_MODEL=1 or 0  download [[ model_desc ]] now, or not;
 #                       without it, the script asks when run in a terminal and skips it otherwise

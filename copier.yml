@@ -23,7 +23,8 @@ _message_after_copy: |
     installer workflow, which tests the scripts on Windows, macOS and Linux and builds the
     setup .exe.
   - Keep the repository public. The install commands download the scripts from it.
-  - Push a v* tag to attach the setup .exe to the GitHub release.
+  - Once the plugin's release is on PyPI, push a v* tag to attach the setup .exe to the
+    GitHub release. The setup installs the newest release from PyPI.
   - Later, run `copier update -a installer/.copier-answers.yml` to bring in fixes to the template.
 
 dist:
@@ -66,7 +67,7 @@ app_name:
     [% elif app_name | regex_search('^[\\s.]|[\\s.]$') %]
     must not start or end with a space or a dot
     [% elif app_name | regex_search('^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?$') %]
-    is a device name on Windows
+    must not be a Windows device name such as CON, NUL or COM1
     [% endif %]
 
 comment:
@@ -126,7 +127,7 @@ model_desc:
   when: "[[ model_command != '' ]]"
   validator: >-
     [% if model_command and not model_desc %]
-    needed with model_command
+    must not be empty when model_command is set
     [% elif model_desc | regex_search('[\'"`$\\\\{}%]') %]
     must not contain quotes, $, `, \, %, or braces
     [% endif %]
