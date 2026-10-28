@@ -550,3 +550,9 @@ def test_powershell_uninstall_stops_part_way(tmp_path):
 
 def test_smoke_test_compiles(rendered):
     compile((rendered / 'installer/smoke_test.py').read_text(), 'smoke_test.py', 'exec')
+
+
+def test_file_names_work_on_windows():
+    # Windows cannot check out, and so copier cannot clone, a repository with these in a path
+    tracked = subprocess.run(['git', 'ls-files'], cwd=TEMPLATE, capture_output=True, text=True, check=True)
+    assert [path for path in tracked.stdout.splitlines() if re.search(r'[<>:"|?*\\]', path)] == []
