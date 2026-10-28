@@ -91,6 +91,16 @@ def windows_colour():
     return bool(kernel32.GetConsoleMode(handle, ctypes.byref(mode)) and kernel32.SetConsoleMode(handle, mode.value | 4))
 
 
+def utf8_output(environ):
+    """
+    UTF-8 output from this step and the Pythons it runs, as from uv. On Windows, Python otherwise writes
+    the ANSI code page into a pipe or file, such as a CI log, which garbles names that are not ASCII.
+    """
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    environ['PYTHONIOENCODING'] = 'utf-8'
+
+
 def run(*command):
     """runs a command and stops the install if it fails"""
     try:
@@ -279,9 +289,7 @@ def main(argv=None):
         fetch_xcb_cursor(args.folder)
         return 0
 
-    # what the console cannot show comes out as ?
-    sys.stdout.reconfigure(errors='replace')
-    sys.stderr.reconfigure(errors='replace')
+    utf8_output(os.environ)
     root = Path(__file__).resolve().parent
     config = json.loads(CONFIG)
     if WINDOWS:

@@ -1,6 +1,7 @@
 """the Python step that install.sh and install.ps1 share, run directly with fakes for uv and napari-launcher"""
 
 import importlib.util
+import io
 import json
 import sys
 import urllib.error
@@ -304,3 +305,16 @@ def test_source_fits_both_scripts():
     assert 'PY' not in lines
     assert not any(line.lstrip().startswith("'@") for line in lines)
     assert text.count('[[') == 1 and '[%' not in text and '[#' not in text
+
+
+def test_utf8_output(step, monkeypatch):
+    # Python on Windows writes the ANSI code page into a pipe
+    stdout = io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+    monkeypatch.setattr(sys, 'stdout', stdout)
+    monkeypatch.setattr(sys, 'stderr', io.TextIOWrapper(io.BytesIO(), encoding='cp1252'))
+    environ = {}
+    step.utf8_output(environ)
+    print('Zellzählung')
+    stdout.flush()
+    assert stdout.buffer.getvalue() == 'Zellzählung\n'.encode()
+    assert environ == {'PYTHONIOENCODING': 'utf-8'}
