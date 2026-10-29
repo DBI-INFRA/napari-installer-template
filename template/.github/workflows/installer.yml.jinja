@@ -89,7 +89,7 @@ jobs:
       - name: Check that napari opens with the widget
         uses: aganders3/headless-gui@v2
         with:
-          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} installer/smoke_test.py
+          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} installer/check_install.py
 
       - name: Uninstall (macOS, Linux)
         if: runner.os != 'Windows'
@@ -137,7 +137,7 @@ jobs:
           [[ env ]]_SPEC="$GITHUB_WORKSPACE" sh < installer/install.sh
 
       - name: Check that napari opens with the widget
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/[[ dist ]]/env/bin/python installer/smoke_test.py
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/[[ dist ]]/env/bin/python installer/check_install.py
 
   windows-setup:
     name: Windows setup .exe

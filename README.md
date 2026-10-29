@@ -58,7 +58,7 @@ installer/windows/<dist>.iss       Inno Setup script for the setup .exe, which r
 installer/windows/icon.ico         napari's icon, used when setup_icon is empty
 installer/windows/icon-license.txt napari's license, which covers that icon
 installer/windows/.gitignore       keeps Inno Setup's Output folder out of git
-installer/smoke_test.py            opens the installed napari, checks that the widget is docked,
+installer/check_install.py         opens the installed napari, checks that the widget is docked,
                                    and closes it
 installer/README.md                install instructions for the plugin's users
 installer/.copier-answers.yml      your answers, for copier update
@@ -100,7 +100,7 @@ variables.
 ```bash
 H=$(mktemp -d)
 HOME=$H <ENV>_SPEC=$PWD sh installer/install.sh                        # installs this checkout
-HOME=$H $H/.local/share/<dist>/env/bin/python installer/smoke_test.py  # opens a window briefly
+HOME=$H $H/.local/share/<dist>/env/bin/python installer/check_install.py  # opens a window briefly
 HOME=$H sh installer/install.sh --uninstall
 ```
 

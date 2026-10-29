@@ -55,8 +55,8 @@ def test_copier_update(tmp_path):
     text = copier_yml.read_text()
     assert f'default: "{uv_version}"' in text
     copier_yml.write_text(text.replace(f'default: "{uv_version}"', 'default: "99.0.0"', 1))
-    smoke_test = template / 'template/installer/smoke_test.py.jinja'
-    smoke_test.write_text(smoke_test.read_text() + '# from the next release\n')
+    check = template / 'template/installer/check_install.py.jinja'
+    check.write_text(check.read_text() + '# from the next release\n')
     # the shared Python step, which both install scripts include
     step = template / 'include/install_step.py'
     step.write_text(step.read_text() + '# from the next release\n')
@@ -70,7 +70,7 @@ def test_copier_update(tmp_path):
     assert stored['app_name'] == 'Foo App'
     install_sh = (project / 'installer/install.sh').read_text()
     assert 'UV_VERSION=99.0.0' in install_sh and '"app_name": "Foo App"' in install_sh
-    assert (project / 'installer/smoke_test.py').read_text().endswith('# from the next release\n')
+    assert (project / 'installer/check_install.py').read_text().endswith('# from the next release\n')
     for script in ('install.sh', 'install.ps1'):
         assert '\n# from the next release\n' in (project / 'installer' / script).read_text()
     assert readme.read_text().endswith('\nSee also the plugin documentation.\n')

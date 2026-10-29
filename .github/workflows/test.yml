@@ -101,7 +101,7 @@ jobs:
       - name: Check that napari opens with the widget
         uses: aganders3/headless-gui@v2.2
         with:
-          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} sample/installer/smoke_test.py
+          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} sample/installer/check_install.py
 
       - name: Uninstall (macOS, Linux)
         if: runner.os != 'Windows'
@@ -151,7 +151,7 @@ jobs:
         run: sh < sample/installer/install.sh
 
       - name: Check that napari opens with the widget
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/napari-animation/env/bin/python sample/installer/smoke_test.py
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/napari-animation/env/bin/python sample/installer/check_install.py
 
   # CPU PyTorch, the extra setup step, and a shortcut name that is not ASCII, which Windows PowerShell
   # 5.1 reads correctly only because install.ps1 stays ASCII
@@ -218,7 +218,7 @@ jobs:
       - name: Check that napari opens with the widget
         uses: aganders3/headless-gui@v2.2
         with:
-          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} dummy/installer/smoke_test.py
+          run: ${{ runner.temp }}/plugin-install/${{ runner.os == 'Windows' && 'env/Scripts/python.exe' || 'env/bin/python' }} dummy/installer/check_install.py
 
       - name: Uninstall (Linux)
         if: runner.os == 'Linux'

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from fnmatch import fnmatch
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,7 @@ SCRIPTS = [
     'installer/install.sh',
     'installer/install.ps1',
     'installer/windows/napari-foo.iss',
-    'installer/smoke_test.py',
+    'installer/check_install.py',
     'installer/README.md',
     '.github/workflows/installer.yml',
 ]
@@ -554,8 +555,14 @@ def test_powershell_uninstall_stops_part_way(tmp_path):
     assert out.returncode == 0 and not root.exists()
 
 
-def test_smoke_test_compiles(rendered):
-    compile((rendered / 'installer/smoke_test.py').read_text(), 'smoke_test.py', 'exec')
+def test_check_install_compiles(rendered):
+    compile((rendered / 'installer/check_install.py').read_text(), 'check_install.py', 'exec')
+
+
+def test_pytest_collects_nothing(rendered):
+    """the plugin's own pytest, run from the repository root, finds no test files among the generated ones"""
+    names = [path.name for path in rendered.rglob('*.py')]
+    assert not [name for name in names if fnmatch(name, 'test_*.py') or fnmatch(name, '*_test.py')]
 
 
 def test_file_names_work_on_windows():
