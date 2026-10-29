@@ -3,6 +3,20 @@
 A [copier](https://copier.readthedocs.io/) template that adds a one-step installer to a napari
 plugin repository, for people who have no Python.
 
+## Who it is for
+
+This is for **plugin developers** whose users are not programmers, such as biologists who want to
+use your plugin but have never installed Python. You run the template once in your plugin's
+repository. It adds an installer that your users run with a click on Windows, or with one command
+on macOS and Linux. They get napari and your plugin, and a desktop shortcut that opens napari with
+your plugin ready to use.
+
+**napari users** don't run the template themselves. If a plugin's README has install instructions
+made with it, follow those. If you would like a plugin to have an installer like this, point its
+developers here.
+
+## How it works
+
 | Platform | User runs | Gets |
 |---|---|---|
 | Windows | `<dist>-setup.exe` from the GitHub release, or a PowerShell one-liner | Start menu and desktop shortcuts; the setup also adds an entry in Settings > Apps |
