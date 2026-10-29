@@ -457,7 +457,8 @@ def test_sh_model_question_on_terminal(tmp_path, typed, downloads):
     seen = read_terminal(terminal, b'[Y/n] ')
     assert b'[Y/n] ' in seen, seen.decode()
     os.write(terminal, typed.encode() + b'\n')
-    seen = read_terminal(terminal, b'To uninstall:', seen)
+    # up to the end of the last line: on macOS, sh exits only once the terminal's output has been read
+    seen = read_terminal(terminal, b'--uninstall\r\n', seen)
     assert sh.wait(timeout=60) == 0, seen.decode()
     os.close(terminal)
     assert b'Download the Foo model (about 300 MB) now? Otherwise it downloads the first time' in seen
