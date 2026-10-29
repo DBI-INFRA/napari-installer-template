@@ -292,3 +292,59 @@ jobs:
           if (Test-Path $root) { throw 'install folder is still there' }
           $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
           if (Test-Path -LiteralPath $lnk) { throw 'desktop shortcut is still there' }
+
+  # as a user without admin rights, as on most computers: junctions that uv makes are then untrusted,
+  # which an admin, as on the runners, does not see
+  windows-setup-user:
+    name: Windows setup .exe, user without admin rights
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Render and build the setup
+        shell: pwsh
+        run: |
+          uvx $($env:RENDER -split ' ')
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+              choco install innosetup -y --no-progress
+              $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6"
+          }
+          iscc /DAppVersion=1.0 sample/installer/windows/napari-animation.iss
+
+      - name: Run the setup silently as a new user
+        shell: pwsh
+        run: |
+          # net user asks before taking a password over 14 characters
+          $password = 'Aa1-' + (New-Guid).ToString().Substring(0, 10)
+          net user setup-test $password /add | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'could not add the user' }
+          $credential = [pscredential]::new('setup-test', (ConvertTo-SecureString $password -AsPlainText -Force))
+          # a folder the new user can write its log to
+          $work = 'C:\setup-test'
+          New-Item -ItemType Directory $work | Out-Null
+          icacls $work /grant 'Users:(OI)(CI)M' | Out-Null
+          Copy-Item sample/installer/windows/Output/napari-animation-setup.exe $work
+          Start-Service seclogon
+          # the new user starts with this environment, so it gets its own folders and none of setup-uv's
+          Get-ChildItem Env:UV_* | Remove-Item
+          $userHome = 'C:\Users\setup-test'
+          $env:USERNAME = 'setup-test'
+          $env:USERPROFILE = $userHome
+          $env:HOMEPATH = '\Users\setup-test'
+          $env:APPDATA = "$userHome\AppData\Roaming"
+          $env:LOCALAPPDATA = "$userHome\AppData\Local"
+          $env:TEMP = $env:TMP = (New-Item -ItemType Directory "$work\temp").FullName
+          $setup = Start-Process "$work\napari-animation-setup.exe" -Credential $credential -LoadUserProfile `
+              -WorkingDirectory $work -Wait -PassThru `
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$work\setup.log"
+          Get-Content "$work\setup.log" -Tail 20 -ErrorAction Continue
+          $root = "$userHome\AppData\Local\napari-animation"
+          if ($setup.ExitCode -ne 0) {
+              Get-Content "$root\install.log" -ErrorAction SilentlyContinue
+              throw "setup failed with exit code $($setup.ExitCode)"
+          }
+          if (-not (Test-Path "$root\env\Scripts\pythonw.exe")) { throw 'no environment' }
