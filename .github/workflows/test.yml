@@ -21,8 +21,8 @@ concurrency:
 
 env:
   # napari-launcher from its repository, so the template is tested against its latest code
-  NAPARI_ANIMATION_LAUNCHER: git+https://github.com/jeskowagner/napari-launcher
-  NAPARI_DUMMY_LAUNCHER: git+https://github.com/jeskowagner/napari-launcher
+  NAPARI_ANIMATION_LAUNCHER: git+https://github.com/DBI-INFRA/napari-launcher
+  NAPARI_DUMMY_LAUNCHER: git+https://github.com/DBI-INFRA/napari-launcher
   RENDER: >-
     copier copy --defaults --vcs-ref HEAD -d dist=napari-animation -d widget=wizard
     -d repo=example/napari-animation . sample

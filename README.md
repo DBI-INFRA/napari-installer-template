@@ -25,7 +25,7 @@ developers here.
 
 Each installer downloads a pinned [uv](https://docs.astral.sh/uv/) into a folder of its own. uv
 installs Python in that folder, then napari, the plugin from PyPI and
-[napari-launcher](https://github.com/jeskowagner/napari-launcher) into a virtual environment. For
+[napari-launcher](https://github.com/DBI-INFRA/napari-launcher) into a virtual environment. For
 plugins that need PyTorch, `uv pip install --torch-backend auto` picks the build for the machine's
 GPU: CUDA, ROCm, Apple MPS or CPU. napari-launcher then adds a shortcut that opens napari with the
 plugin's widget docked. Uninstalling deletes the folder and the shortcuts.
@@ -38,7 +38,7 @@ the install commands download the scripts from `raw.githubusercontent.com`.
 From the plugin's repository root, run:
 
 ```bash
-uvx copier copy gh:jeskowagner/napari-installer-template .
+uvx copier copy gh:DBI-INFRA/napari-installer-template .
 ```
 
 copier asks about the plugin, its widget and the shortcut, and shows a help text with each
