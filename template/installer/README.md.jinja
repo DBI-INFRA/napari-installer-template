@@ -43,9 +43,8 @@ wget -qO- [[ raw ]]/install.sh | sh
 Recent versions of PyTorch do not support Macs with an Intel processor, so the installation may fail on those Macs.
 
 [% endif %]
-[% if model_command %]
-The installer offers to download [[ model_desc ]] straight away: tick the box in the Windows setup, or answer the question in the terminal.
-If you skip this, [[ dist ]] downloads the model the first time it needs it.
+[% if extra_setup_command %]
+The installer offers to [[ extra_setup_desc ]] as part of the installation: tick the box in the Windows setup, or answer the question in the terminal.
 
 [% endif %]
 ### Where it goes

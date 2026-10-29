@@ -1,7 +1,7 @@
-# copier answers for the dummy plugin: PyTorch, a model download, and a non-ASCII name
+# copier answers for the dummy plugin: PyTorch, an extra setup step, and a non-ASCII name
 dist: napari-dummy
 repo: example/napari-dummy
 app_name: Zellzählung
 torch: true
-model_command: -m napari_dummy fetch-model
-model_desc: the dummy model
+extra_setup_command: -m napari_dummy fetch-model
+extra_setup_desc: download the dummy model

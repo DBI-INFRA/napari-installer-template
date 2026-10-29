@@ -21,8 +21,8 @@ CONFIG = {
     'comment': 'napari-foo in napari',
     'shortcut_icon': '',
     'torch': False,
-    'model_command': '',
-    'model_desc': '',
+    'extra_setup_command': '',
+    'extra_setup_desc': '',
     'launcher_spec': 'napari-launcher>=0.1,<0.2',
     'python_version': '3.12',
     'repo': 'someone/napari-foo',
@@ -34,8 +34,8 @@ FULL = {
     'app_name': 'Foo App',
     'shortcut_icon': 'napari_foo:resources/icon.png',
     'torch': True,
-    'model_command': '-m napari_foo fetch-model',
-    'model_desc': 'the Foo model',
+    'extra_setup_command': '-m napari_foo fetch-model',
+    'extra_setup_desc': 'download the Foo model',
 }
 # records each call as a JSON line in calls.jsonl next to it; fails when FAKE_FAIL is part of its arguments
 FAKE = """#!{python}
@@ -187,24 +187,24 @@ def terminal(tmp_path, typed):
     ('typed', 'expected'),
     [('y\n', True), ('\n', True), ('yes please\n', True), ('n\n', False), ('  No\n', False), ('', False)],
 )
-def test_model_question(step, tmp_path, typed, expected):
-    assert step.wants_model(FULL, {}, 'ask', terminal(tmp_path, typed)) is expected
+def test_extra_setup_question(step, tmp_path, typed, expected):
+    assert step.wants_extra_setup(FULL, {}, 'ask', terminal(tmp_path, typed)) is expected
     question = (tmp_path / 'questions').read_text()
-    assert question == 'Download the Foo model now? Otherwise it downloads the first time\nthe plugin needs it. [Y/n] '
+    assert question == 'Download the Foo model now? [Y/n] '
 
 
-def test_model_without_terminal(step, tmp_path):
+def test_extra_setup_without_terminal(step, tmp_path):
     missing = str(tmp_path / 'no-tty')
-    assert step.wants_model(FULL, {}, 'ask', (missing, missing)) is False
+    assert step.wants_extra_setup(FULL, {}, 'ask', (missing, missing)) is False
 
 
-def test_model_choice(step, tmp_path):
+def test_extra_setup_choice(step, tmp_path):
     asked = terminal(tmp_path, 'y\n')
-    assert step.wants_model(FULL, {}, 'yes', asked) is True
-    assert step.wants_model(FULL, {}, 'no', asked) is False
+    assert step.wants_extra_setup(FULL, {}, 'yes', asked) is True
+    assert step.wants_extra_setup(FULL, {}, 'no', asked) is False
     # the environment variable wins over the setup's choice, as in install.ps1
-    assert step.wants_model(FULL, {'NAPARI_FOO_MODEL': '1'}, 'no', asked) is True
-    assert step.wants_model(FULL, {'NAPARI_FOO_MODEL': '0'}, 'ask', asked) is False
+    assert step.wants_extra_setup(FULL, {'NAPARI_FOO_EXTRA_SETUP': '1'}, 'no', asked) is True
+    assert step.wants_extra_setup(FULL, {'NAPARI_FOO_EXTRA_SETUP': '0'}, 'ask', asked) is False
     assert not (tmp_path / 'questions').exists()
 
 
@@ -218,8 +218,8 @@ def test_install(step, root, capsys):
     assert output.endswith('\n'.join(step.summary(CONFIG, python)) + '\n')
 
 
-def test_install_torch_and_model(step, root, capsys):
-    step.install(FULL, root, {'NAPARI_FOO_TORCH': 'cpu'}, no_desktop=True, model='yes')
+def test_install_torch_and_extra_setup(step, root, capsys):
+    step.install(FULL, root, {'NAPARI_FOO_TORCH': 'cpu'}, no_desktop=True, extra_setup='yes')
     made = calls(root)
     assert made[0][:7] == ['uv', 'pip', 'install', '--python', str(root / 'env/bin/python'), '--torch-backend', 'cpu']
     assert made[1][:2] == ['python', '-c'] and 'torch.cuda.is_available()' in made[1][2]
@@ -227,11 +227,11 @@ def test_install_torch_and_model(step, root, capsys):
     assert made[3] == ['python', '-m', 'napari_foo', 'fetch-model']
     output = capsys.readouterr().out
     assert '==> Installing napari and napari-foo (PyTorch build: cpu)\n' in output
-    assert '==> Downloading the Foo model\n' in output
+    assert '==> Download the Foo model\n' in output
 
 
-def test_install_model_declined(step, root):
-    step.install(FULL, root, {'NAPARI_FOO_MODEL': '0'})
+def test_install_extra_setup_declined(step, root):
+    step.install(FULL, root, {'NAPARI_FOO_EXTRA_SETUP': '0'})
     assert ['python', '-m', 'napari_foo', 'fetch-model'] not in calls(root)
 
 
@@ -245,7 +245,7 @@ def test_install_fails(step, root, monkeypatch):
 def test_shortcut_fails(step, root, monkeypatch):
     monkeypatch.setenv('FAKE_FAIL', 'shortcut add')
     with pytest.raises(step.Failed) as failed:
-        step.install(FULL, root, {}, model='yes')
+        step.install(FULL, root, {}, extra_setup='yes')
     message = str(failed.value)
     assert message.startswith('napari and napari-foo are installed, but the shortcuts are not.')
     assert 'says a file was not made by napari-launcher, rename or delete that file, then run this again' in message
@@ -253,7 +253,7 @@ def test_shortcut_fails(step, root, monkeypatch):
     assert message.endswith(
         'If it says a plugin or widget is not there, report it at https://github.com/someone/napari-foo/issues.'
     )
-    # no model download after the failure
+    # no extra setup step after the failure
     assert calls(root)[-1][3:5] == ['shortcut', 'add']
 
 

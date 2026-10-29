@@ -107,28 +107,29 @@ torch:
     To check, run `uv pip compile pyproject.toml | grep -i '^torch'`.
   default: false
 
-model_command:
+extra_setup_command:
   type: str
   help: >-
-    Arguments to the installed Python that download the model weights, for example
-    `-m napari_foo fetch-model`. The installers offer to run it. It must exit with a non-zero
-    code if the download fails. Leave empty if there is nothing to download.
+    Arguments to the installed Python for an extra setup step after the install, such as
+    downloading model weights, for example `-m napari_foo fetch-model`. The installers offer to
+    run it, and the user can say no. It must exit with a non-zero code if it fails. Leave empty
+    if the plugin needs no extra setup.
   default: ""
   validator: >-
-    [% if model_command and not (model_command | regex_search('^[A-Za-z0-9_.=:/ -]+$')) %]
+    [% if extra_setup_command and not (extra_setup_command | regex_search('^[A-Za-z0-9_.=:/ -]+$')) %]
     may only contain letters, digits, spaces and _ . = : / -
     [% endif %]
 
-model_desc:
+extra_setup_desc:
   type: str
   help: >-
-    What the command downloads, as the installers should name it, for example
-    "the Foo model (about 300 MB)".
-  when: "[[ model_command != '' ]]"
+    What the extra setup step does, starting with a verb, for example "download the Foo model
+    (about 300 MB)". The installers ask "<this> now?".
+  when: "[[ extra_setup_command != '' ]]"
   validator: >-
-    [% if model_command and not model_desc %]
-    must not be empty when model_command is set
-    [% elif model_desc | regex_search('[\'"`$\\\\{}%]') %]
+    [% if extra_setup_command and not extra_setup_desc %]
+    must not be empty when extra_setup_command is set
+    [% elif extra_setup_desc | regex_search('[\'"`$\\\\{}%]') %]
     must not contain quotes, $, `, \, %, or braces
     [% endif %]
 

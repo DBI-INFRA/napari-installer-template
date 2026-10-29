@@ -20,8 +20,8 @@ FULL = {
     'widget': 'Foo widget',
     'app_name': 'Foo App',
     'torch': True,
-    'model_command': '-m napari_foo fetch-model',
-    'model_desc': 'the Foo model (about 300 MB)',
+    'extra_setup_command': '-m napari_foo fetch-model',
+    'extra_setup_desc': 'download the Foo model (about 300 MB)',
     'shortcut_icon': 'napari_foo:resources/icon.png',
     'setup_icon': 'napari_foo/resources/icon.ico',
 }
@@ -30,8 +30,8 @@ NON_ASCII = {
     'widget': 'Z\u00e4hl widget',
     'app_name': 'Zellz\u00e4hlung',
     'comment': 'Z\u00e4hlt Zellen & Kerne <schnell>',
-    'model_command': '-m napari_foo fetch-model',
-    'model_desc': 'das Modell \U0001f642',
+    'extra_setup_command': '-m napari_foo fetch-model',
+    'extra_setup_desc': 'lade das Modell \U0001f642',
 }
 BOM = b'\xef\xbb\xbf'
 SCRIPTS = [
@@ -143,22 +143,22 @@ def test_base_script_values(tmp_path):
         'comment': 'napari-foo in napari',
         'shortcut_icon': '',
         'torch': False,
-        'model_command': '',
-        'model_desc': '',
+        'extra_setup_command': '',
+        'extra_setup_desc': '',
         'launcher_spec': 'napari-launcher>=0.1,<0.2',
         'python_version': '3.12',
         'repo': 'someone/napari-foo',
         'branch': 'main',
     }
     assert 'NAPARI_FOO_HOME' in sh
-    assert 'NAPARI_FOO_TORCH' not in sh and 'NAPARI_FOO_MODEL' not in sh
+    assert 'NAPARI_FOO_TORCH' not in sh and 'NAPARI_FOO_EXTRA_SETUP' not in sh
     assert 'run_step install\n' in sh and 'run_step uninstall || true\n' in sh
     assert 'UV_UNMANAGED_INSTALL="$ROOT/bin"' in sh
     ps1 = (out / 'installer/install.ps1').read_text()
     assert step_config(out / 'installer/install.ps1') == config
     assert '& $Python -I -u $Step install @StepArgs' in ps1
     assert '& $Python -I -u $Step uninstall' in ps1
-    assert '--model' not in ps1.split("\n'@\n")[1]
+    assert '--extra-setup' not in ps1.split("\n'@\n")[1]
     assert 'uv-x86_64-pc-windows-msvc.zip' in ps1
     assert 'astral.sh' not in ps1
     assert 'UNINSTALL' not in ps1
@@ -174,7 +174,7 @@ def test_base_script_values(tmp_path):
     assert f'wget -qO- {url} | sh\n' in readme
     assert f'wget -qO- {url} | sh -s -- --uninstall\n' in readme
     assert '%LOCALAPPDATA%\\napari-foo' in readme and '~/.local/share/napari-foo' in readme
-    assert 'PyTorch' not in readme and 'model' not in readme
+    assert 'PyTorch' not in readme and 'offers to' not in readme
     assert 'napari-launcher shortcut add -w napari-foo --name "napari-foo"' in readme
     assert (
         'powershell -ExecutionPolicy ByPass -c "& ([scriptblock]::Create((irm '
@@ -185,19 +185,19 @@ def test_base_script_values(tmp_path):
 def test_full_script_values(tmp_path):
     out = render(tmp_path, **FULL)
     sh = (out / 'installer/install.sh').read_text()
-    assert 'NAPARI_FOO_TORCH' in sh and 'NAPARI_FOO_MODEL' in sh
+    assert 'NAPARI_FOO_TORCH' in sh and 'NAPARI_FOO_EXTRA_SETUP' in sh
     config = step_config(out / 'installer/install.sh')
     assert {key: config[key] for key in FULL if key in config} == {key: FULL[key] for key in FULL if key in config}
     ps1 = (out / 'installer/install.ps1').read_text()
     assert step_config(out / 'installer/install.ps1') == config
     assert "[ValidateSet('ask', 'yes', 'no')]" in ps1
-    assert "if ($Model -ne 'ask') { $StepArgs += @('--model', $Model) }" in ps1
+    assert "if ($ExtraSetup -ne 'ask') { $StepArgs += @('--extra-setup', $ExtraSetup) }" in ps1
     iss = (out / SCRIPTS[2]).read_text()
     assert 'Parameters: "-m napari_launcher launch -w napari-foo ""Foo widget"""' in iss
-    assert 'Name: "model"' in iss
+    assert 'Name: "extrasetup"; Description: "Download the Foo model (about 300 MB) &now"' in iss
     readme = (out / 'installer/README.md').read_text()
     assert 'Macs with an Intel processor' in readme
-    assert 'download the Foo model (about 300 MB) straight away' in readme
+    assert 'offers to download the Foo model (about 300 MB) as part of the installation' in readme
     assert 'napari-launcher shortcut add -w napari-foo "Foo widget" --name "Foo App"' in readme
 
 
@@ -244,6 +244,11 @@ def test_step_answers(tmp_path):
         }
 
 
+def needs(key):
+    """the other answers that the answer to key needs"""
+    return {'extra_setup_desc': 'download the model'} if key == 'extra_setup_command' else {}
+
+
 @pytest.mark.parametrize(
     ('key', 'value'),
     [
@@ -263,18 +268,18 @@ def test_step_answers(tmp_path):
         ('branch', '$(id)'),
         ('branch', '-x'),
         ('branch', 'a..b'),
-        ('model_command', '-m foo; rm -rf ~'),
-        ('model_command', '-m foo $(id)'),
-        ('model_command', '-m foo > out'),
-        ('model_command', '-m foo\nrm'),
-        ('model_command', '-c print(1)'),
+        ('extra_setup_command', '-m foo; rm -rf ~'),
+        ('extra_setup_command', '-m foo $(id)'),
+        ('extra_setup_command', '-m foo > out'),
+        ('extra_setup_command', '-m foo\nrm'),
+        ('extra_setup_command', '-c print(1)'),
         ('setup_icon', 'icon.png'),
         ('app_id', '{0B5C0E3A-1D2B-4C1E-9F00-123456789ABC}'),
     ],
 )
 def test_rejects_unsafe_answers(tmp_path, key, value):
     with pytest.raises(ValueError, match=f"question '{key}'"):
-        render(tmp_path, **{**BASE, key: value, **({'model_desc': 'the model'} if key == 'model_command' else {})})
+        render(tmp_path, **{**BASE, key: value, **needs(key)})
 
 
 @pytest.mark.parametrize(
@@ -284,11 +289,11 @@ def test_rejects_unsafe_answers(tmp_path, key, value):
         ('app_name', 'Zellz\u00e4hlung 2.0'),
         ('app_name', 'Console'),
         ('branch', 'release/v1.2_x'),
-        ('model_command', '-m napari_foo.fetch --model=cyto3 --url https://example.org/w:1'),
+        ('extra_setup_command', '-m napari_foo.fetch --model=cyto3 --url https://example.org/w:1'),
     ],
 )
 def test_accepts_answers(tmp_path, key, value):
-    render(tmp_path, **{**BASE, key: value, **({'model_desc': 'the model'} if key == 'model_command' else {})})
+    render(tmp_path, **{**BASE, key: value, **needs(key)})
 
 
 def test_sh_uninstall(tmp_path):
@@ -356,7 +361,7 @@ def test_sh_install_runs_step(tmp_path):
     fake_python(root / 'env/bin/python', log, real=True)
     # as a run before left it
     (root / '.napari-foo-install').touch()
-    env = {**os.environ, 'NAPARI_FOO_HOME': str(root), 'NAPARI_FOO_MODEL': '0'}
+    env = {**os.environ, 'NAPARI_FOO_HOME': str(root), 'NAPARI_FOO_EXTRA_SETUP': '0'}
     run = subprocess.run(['sh', script], check=False, env=env, capture_output=True, text=True)
     assert run.returncode == 0, run.stdout + run.stderr
     calls = logged(log)
@@ -426,7 +431,7 @@ def read_terminal(terminal, until, seen=b''):
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='needs a pseudo-terminal')
 @pytest.mark.parametrize(('typed', 'downloads'), [('n', False), ('', True)])
-def test_sh_model_question_on_terminal(tmp_path, typed, downloads):
+def test_sh_extra_setup_question_on_terminal(tmp_path, typed, downloads):
     """as with `curl | sh`: the script comes through standard input, and the question goes to the terminal"""
     import fcntl
     import pty
@@ -461,7 +466,7 @@ def test_sh_model_question_on_terminal(tmp_path, typed, downloads):
     seen = read_terminal(terminal, b'--uninstall\r\n', seen)
     assert sh.wait(timeout=60) == 0, seen.decode()
     os.close(terminal)
-    assert b'Download the Foo model (about 300 MB) now? Otherwise it downloads the first time' in seen
+    assert b'Download the Foo model (about 300 MB) now? [Y/n] ' in seen
     assert (['-m', 'napari_foo', 'fetch-model'] in logged(log)) is downloads
 
 
@@ -478,18 +483,18 @@ def test_powershell_step_code(tmp_path):
 
 @has('pwsh')
 def test_powershell_install_runs_step(tmp_path):
-    """install.ps1 up to the step, with -NoDesktop and -Model passed on to it"""
+    """install.ps1 up to the step, with -NoDesktop and -ExtraSetup passed on to it"""
     script = render(tmp_path / 'out', **FULL) / 'installer/install.ps1'
     root = tmp_path / 'install [1]'
     log = tmp_path / 'calls'
     fake_uv(root / 'bin/uv.exe', log)
     fake_python(root / 'env/Scripts/python.exe', log)
     (root / '.napari-foo-install').touch()
-    out = pwsh(f"& '{script}' -Root '{root}' -NoDesktop -Model no; exit $LASTEXITCODE")
+    out = pwsh(f"& '{script}' -Root '{root}' -NoDesktop -ExtraSetup no; exit $LASTEXITCODE")
     assert out.returncode == 0, out.stdout + out.stderr
     calls = logged(log)
     assert calls[0][:3] == ['uv', 'python', 'install'] and calls[1][:2] == ['uv', 'venv']
-    assert calls[2] == ['-I', '-u', str(root / 'install-step.py'), 'install', '--no-desktop', '--model', 'no']
+    assert calls[2] == ['-I', '-u', str(root / 'install-step.py'), 'install', '--no-desktop', '--extra-setup', 'no']
     assert not (root / 'install-step.py').exists()
     assert (root / 'install.log').exists()
 

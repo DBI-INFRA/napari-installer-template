@@ -30,9 +30,10 @@ uvx copier copy gh:jeskowagner/napari-installer-template .
 copier asks about the plugin, its widget and the shortcut, and shows a help text with each
 question.
 
-If you give a command that downloads model weights (`model_command`), the installers offer to run
-it at install time. The setup has a tick box for it, and the scripts ask a yes or no question in
-the terminal. The command must exit with a non-zero code when the download fails.
+If the plugin needs an extra setup step after the install, such as downloading model weights, give
+the command for it as `extra_setup_command`. The installers offer to run it. The setup has a tick
+box for it, and the scripts ask a yes or no question in the terminal. The command must exit with a
+non-zero code when it fails.
 
 The template writes these files:
 

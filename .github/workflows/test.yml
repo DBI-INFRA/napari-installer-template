@@ -26,7 +26,7 @@ env:
   RENDER: >-
     copier copy --defaults --vcs-ref HEAD -d dist=napari-animation -d widget=wizard
     -d repo=example/napari-animation . sample
-  # a local plugin with a PyTorch dependency, a model download and a non-ASCII app name
+  # a local plugin with a PyTorch dependency, an extra setup step and a non-ASCII app name
   RENDER_DUMMY: copier copy --defaults --vcs-ref HEAD --data-file tests/fixtures/napari-dummy.yml . dummy
 
 jobs:
@@ -153,10 +153,10 @@ jobs:
       - name: Check that napari opens with the widget
         run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/napari-animation/env/bin/python sample/installer/smoke_test.py
 
-  # CPU PyTorch, the model download, and a shortcut name that is not ASCII, which Windows PowerShell
+  # CPU PyTorch, the extra setup step, and a shortcut name that is not ASCII, which Windows PowerShell
   # 5.1 reads correctly only because install.ps1 stays ASCII
   torch-plugin:
-    name: PyTorch plugin with a model, ${{ matrix.platform }}
+    name: PyTorch plugin with extra setup, ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -165,7 +165,7 @@ jobs:
     env:
       NAPARI_DUMMY_SPEC: ${{ github.workspace }}/tests/fixtures/napari-dummy
       NAPARI_DUMMY_TORCH: cpu
-      NAPARI_DUMMY_MODEL: 1
+      NAPARI_DUMMY_EXTRA_SETUP: 1
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -204,7 +204,7 @@ jobs:
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File dummy/installer/install.ps1
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit code $LASTEXITCODE" }
-          if (-not (Test-Path "$env:NAPARI_DUMMY_HOME\env\napari-dummy-model.pt")) { throw 'no model file' }
+          if (-not (Test-Path "$env:NAPARI_DUMMY_HOME\env\napari-dummy-model.pt")) { throw 'the extra setup step did not run' }
           # the name from its character code, so the check does not depend on how this step is read
           $lnk = "Zellz$([char]0xE4)hlung.lnk"
           foreach ($folder in 'Programs', 'Desktop') {
@@ -237,7 +237,7 @@ jobs:
           $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
           if (Test-Path -LiteralPath $lnk) { throw 'desktop shortcut is still there' }
 
-  # the dummy plugin again, with the model download chosen as a setup task
+  # the dummy plugin again, with the extra setup step chosen as a setup task
   windows-setup:
     name: Windows setup .exe
     runs-on: windows-latest
@@ -266,7 +266,7 @@ jobs:
         shell: pwsh
         run: |
           $setup = Start-Process dummy/installer/windows/Output/napari-dummy-setup.exe -Wait -PassThru `
-              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=desktopicon,model', '/LOG=setup.log'
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=desktopicon,extrasetup', '/LOG=setup.log'
           Get-Content setup.log -Tail 20
           $root = "$env:LOCALAPPDATA\napari-dummy"
           if ($setup.ExitCode -ne 0) {
@@ -275,7 +275,7 @@ jobs:
           }
           & "$root\env\Scripts\python.exe" -c "import napari, napari_launcher, napari_dummy"
           if ($LASTEXITCODE -ne 0) { throw 'the installed environment does not work' }
-          if (-not (Test-Path "$root\env\napari-dummy-model.pt")) { throw 'no model file' }
+          if (-not (Test-Path "$root\env\napari-dummy-model.pt")) { throw 'the extra setup step did not run' }
           $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
           if (-not (Test-Path -LiteralPath $lnk)) {
               Get-ChildItem ([Environment]::GetFolderPath('Desktop')) -Filter *.lnk | Out-Host

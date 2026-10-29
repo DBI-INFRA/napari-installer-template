@@ -2,7 +2,7 @@
 The work of install.sh and install.ps1 once uv, Python and the environment exist. Both scripts include
 this file, write it into the install folder and run it with the environment's Python:
 
-    python -I -u install-step.py install [--no-desktop] [--model ask|yes|no]
+    python -I -u install-step.py install [--no-desktop] [--extra-setup ask|yes|no]
     python -I -u install-step.py uninstall
 
 It uses only the standard library, and stays ASCII because install.ps1 does.
@@ -28,8 +28,8 @@ CONFIG = r"""[[ {
     'comment': comment,
     'shortcut_icon': shortcut_icon,
     'torch': torch,
-    'model_command': model_command,
-    'model_desc': model_desc | default(''),
+    'extra_setup_command': extra_setup_command,
+    'extra_setup_desc': extra_setup_desc | default(''),
     'launcher_spec': launcher_spec,
     'python_version': python_version,
     'repo': repo,
@@ -138,12 +138,18 @@ def shortcut_command(config, environ, python, no_desktop=False):
 TERMINAL = ('CONIN$', 'CONOUT$') if WINDOWS else ('/dev/tty', '/dev/tty')
 
 
-def wants_model(config, environ, choice='ask', terminal=TERMINAL):
+def extra_setup_title(config):
+    """the extra setup step's description, with a capital letter, to start a sentence"""
+    desc = config['extra_setup_desc']
+    return desc[:1].upper() + desc[1:]
+
+
+def wants_extra_setup(config, environ, choice='ask', terminal=TERMINAL):
     """
-    Whether to download the model now: <ENV>_MODEL=1 or 0 decides, then -Model yes or no from the setup,
-    then the user's answer. Without a terminal to ask on, the plugin downloads it when it needs it.
+    Whether to run the extra setup step: <ENV>_EXTRA_SETUP=1 or 0 decides, then -ExtraSetup yes or no from
+    the setup, then the user's answer. Without a terminal to ask on, the step does not run.
     """
-    value = setting(config, environ, 'MODEL')
+    value = setting(config, environ, 'EXTRA_SETUP')
     if value in ('0', '1'):
         return value == '1'
     if choice != 'ask':
@@ -153,8 +159,7 @@ def wants_model(config, environ, choice='ask', terminal=TERMINAL):
             open(terminal[0], encoding='utf-8', errors='replace') as answers,
             open(terminal[1], 'w', encoding='utf-8') as questions,
         ):
-            questions.write(f'Download {config["model_desc"]} now? Otherwise it downloads the first time\n')
-            questions.write('the plugin needs it. [Y/n] ')
+            questions.write(f'{extra_setup_title(config)} now? [Y/n] ')
             questions.flush()
             answer = answers.readline()
     except OSError:
@@ -230,10 +235,10 @@ def summary(config, python):
     ]
 
 
-def install(config, root, environ, no_desktop=False, model='ask'):
+def install(config, root, environ, no_desktop=False, extra_setup='ask'):
     python = root / 'env' / ('Scripts/python.exe' if WINDOWS else 'bin/python')
     uv = root / 'bin' / ('uv.exe' if WINDOWS else 'uv')
-    download_model = bool(config['model_command']) and wants_model(config, environ, model)
+    extra_setup_now = bool(config['extra_setup_command']) and wants_extra_setup(config, environ, extra_setup)
 
     spec = setting(config, environ, 'SPEC', config['dist'])
     if config['torch']:
@@ -255,9 +260,9 @@ def install(config, root, environ, no_desktop=False, model='ask'):
             f'a plugin or widget is not there, report it at https://github.com/{config["repo"]}/issues.'
         )
 
-    if download_model:
-        say(f'Downloading {config["model_desc"]}')
-        run(str(python), *config['model_command'].split())
+    if extra_setup_now:
+        say(extra_setup_title(config))
+        run(str(python), *config['extra_setup_command'].split())
 
     first, *rest = summary(config, python)
     say(first)
@@ -281,7 +286,7 @@ def main(argv=None):
     commands = parser.add_subparsers(dest='command', required=True)
     install_args = commands.add_parser('install')
     install_args.add_argument('--no-desktop', action='store_true')
-    install_args.add_argument('--model', choices=['ask', 'yes', 'no'], default='ask')
+    install_args.add_argument('--extra-setup', choices=['ask', 'yes', 'no'], default='ask')
     commands.add_parser('uninstall')
     commands.add_parser('xcb-cursor').add_argument('folder')
     args = parser.parse_args(argv)
@@ -298,7 +303,7 @@ def main(argv=None):
     try:
         if args.command == 'uninstall':
             return uninstall(config, root)
-        install(config, root, os.environ, args.no_desktop, args.model)
+        install(config, root, os.environ, args.no_desktop, args.extra_setup)
     except Failed as e:
         show(f'error: {e}', '31' if WINDOWS else '', sys.stderr)
         return 1

@@ -42,8 +42,8 @@ jobs:
         platform: [ubuntu-latest, macos-latest, windows-latest]
     env:
       [[ env ]]_SPEC: ${{ github.workspace }}
-[% if model_command %]
-      [[ env ]]_MODEL: 0
+[% if extra_setup_command %]
+      [[ env ]]_EXTRA_SETUP: 0
 [% endif %]
     steps:
       - uses: actions/checkout@v7
@@ -111,9 +111,9 @@ jobs:
     name: install script, Ubuntu desktop libraries
     runs-on: ubuntu-latest
     container: ubuntu:24.04
-[% if model_command %]
+[% if extra_setup_command %]
     env:
-      [[ env ]]_MODEL: 0
+      [[ env ]]_EXTRA_SETUP: 0
 [% endif %]
     steps:
       - name: Install what Ubuntu desktop has, plus a virtual display

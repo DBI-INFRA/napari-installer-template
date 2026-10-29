@@ -39,8 +39,8 @@ WizardStyle=modern
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"
-[% if model_command %]
-Name: "model"; Description: "Download [[ model_desc ]] &now, instead of the first time the plugin needs it"
+[% if extra_setup_command %]
+Name: "extrasetup"; Description: "[[ extra_setup_desc[:1] | upper ~ extra_setup_desc[1:] ]] &now"
 [% endif %]
 
 [Files]
@@ -94,11 +94,11 @@ begin
       ' -Root "' + ExpandConstant('{app}') + '"';
     if not WizardIsTaskSelected('desktopicon') then
       Params := Params + ' -NoDesktop';
-[% if model_command %]
-    if WizardIsTaskSelected('model') then
-      Params := Params + ' -Model yes'
+[% if extra_setup_command %]
+    if WizardIsTaskSelected('extrasetup') then
+      Params := Params + ' -ExtraSetup yes'
     else
-      Params := Params + ' -Model no';
+      Params := Params + ' -ExtraSetup no';
 [% endif %]
     if not WizardSilent() then
       Params := Params + ' -PauseOnError';
