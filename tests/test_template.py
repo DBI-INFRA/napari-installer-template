@@ -168,6 +168,8 @@ def test_base_script_values(tmp_path):
     assert 'Parameters: "-m napari_launcher shortcut remove --name ""{#AppName}"""' in iss
     assert """' -Root "' + ExpandConstant('{app}') + '"'""" in iss
     assert 'SetupIconFile=icon.ico' in iss
+    # uv's junctions would be untrusted for a user without admin rights
+    assert '#if Ver >= 0x06070000\nRedirectionGuard=no\n#endif\n' in iss
     # the failure message points to the log, whichever step failed
     assert "'The end of ' + ExpandConstant('{app}\\install.log') + ' says what went wrong. '" in iss
     readme = (out / 'installer/README.md').read_text()
