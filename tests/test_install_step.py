@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -176,6 +177,91 @@ def test_torch_backend_reads_real_uv(step, tmp_path, monkeypatch):
     uv.chmod(0o755)
     monkeypatch.setenv('UV_NO_CONFIG', '1')
     assert step.torch_backend(FULL, {}, uv, sys.executable) == 'cpu'
+
+
+@pytest.fixture
+def vc_runtime(step, tmp_path, monkeypatch):
+    """a fake uv that unpacks a fake msvc-runtime, an empty System32 and the folder of the base Python"""
+    uv = tmp_path / 'uv'
+    names = [*step.VC_RUNTIME, 'msvc_runtime.pyd']
+    uv.write_text(
+        f'#!{sys.executable}\n'
+        'import pathlib, sys\n'
+        "target = pathlib.Path(sys.argv[sys.argv.index('--target') + 1])\n"
+        f'for name in {names!r}:\n'
+        "    (target / name).write_text('dll')\n"
+    )
+    uv.chmod(0o755)
+    (tmp_path / 'windows/System32').mkdir(parents=True)
+    base = tmp_path / 'base'
+    base.mkdir()
+    monkeypatch.setattr(sys, 'base_prefix', str(base))
+    monkeypatch.setattr(step, 'microsoft_signed', lambda folder: True)
+    return uv, {'SystemRoot': str(tmp_path / 'windows')}, base
+
+
+def test_vc_runtime_in_system32(step, vc_runtime, tmp_path, capsys):
+    uv, environ, base = vc_runtime
+    for name in step.VC_RUNTIME:
+        (tmp_path / 'windows/System32' / name).touch()
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert list(base.iterdir()) == []
+    assert capsys.readouterr().out == ''
+
+
+def test_vc_runtime_partly_missing(step, vc_runtime, tmp_path, capsys):
+    uv, environ, base = vc_runtime
+    (tmp_path / 'windows/System32/msvcp140.dll').touch()
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert sorted(path.name for path in base.iterdir()) == sorted(step.VC_RUNTIME)
+    assert capsys.readouterr().out == '==> Adding the Visual C++ runtime\n'
+    assert list(tmp_path.glob('tmp*')) == []
+
+
+def test_vc_runtime_not_signed(step, vc_runtime, tmp_path, monkeypatch, capsys):
+    uv, environ, base = vc_runtime
+    monkeypatch.setattr(step, 'microsoft_signed', lambda folder: False)
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert list(base.iterdir()) == []
+    assert 'not signed by Microsoft' in capsys.readouterr().out
+
+
+def test_vc_runtime_incomplete(step, vc_runtime, tmp_path, monkeypatch, capsys):
+    uv, environ, base = vc_runtime
+    monkeypatch.setattr(step, 'VC_RUNTIME', (*step.VC_RUNTIME, 'other.dll'))
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert list(base.iterdir()) == []
+    assert 'lacks part of the runtime' in capsys.readouterr().out
+
+
+def test_vc_runtime_download_fails(step, vc_runtime, root, monkeypatch, capsys):
+    _, environ, base = vc_runtime
+    monkeypatch.setenv('FAKE_FAIL', 'msvc-runtime')
+    step.add_vc_runtime(root / 'bin/uv', 'python', root, environ)
+    assert list(base.iterdir()) == []
+    assert step.VC_RUNTIME_URL in capsys.readouterr().out
+
+
+def test_vc_runtime_comes_before_the_torch_check(step, root, monkeypatch):
+    fake(root / 'env/Scripts/python.exe', root.parent / 'calls.jsonl')
+    fake(root / 'bin/uv.exe', root.parent / 'calls.jsonl')
+    monkeypatch.setattr(step, 'WINDOWS', True)
+    seen = []
+    monkeypatch.setattr(step, 'add_vc_runtime', lambda *args: seen.append([call[:2] for call in calls(root)]))
+    step.install(FULL, root, {'NAPARI_FOO_TORCH': 'cpu', 'NAPARI_FOO_EXTRA_SETUP': '0'})
+    assert seen == [[['uv.exe', 'pip']]]
+    assert calls(root)[1][:2] == ['python.exe', '-c']
+
+
+def test_msvc_runtime_has_the_vc_runtime(step, tmp_path):
+    uv = shutil.which('uv')
+    if uv is None:
+        pytest.skip('no uv')
+    command = [uv, 'pip', 'install', '--quiet', '--target', str(tmp_path), '--no-deps', 'msvc-runtime']
+    command += ['--python-platform', 'windows', '--python-version', '3.12']
+    if subprocess.run(command, check=False, capture_output=True).returncode:
+        pytest.skip('no network')
+    assert set(step.VC_RUNTIME) <= {path.name for path in tmp_path.glob('*.dll')}
 
 
 def test_shortcut_command(step):
