@@ -116,10 +116,31 @@ def setting(config, environ, name, default=''):
     return environ.get(f'{config["env"]}_{name}') or default
 
 
-def install_command(config, environ, uv, python):
+def torch_backend(config, environ, uv, python):
+    """
+    The PyTorch build to install: <ENV>_TORCH if it names one, otherwise uv's pick for this machine. uv picks
+    XPU for any Intel display adapter, including integrated graphics. That build is much larger, and plugins
+    that only look for CUDA and MPS cannot use it, so the CPU build takes its place. If the check fails, uv
+    decides.
+    """
+    chosen = setting(config, environ, 'TORCH', 'auto')
+    if chosen != 'auto':
+        return chosen
+    command = [str(uv), 'pip', 'compile', '-', '--python', str(python), '--torch-backend', 'auto']
+    command += ['--no-deps', '--no-header', '--no-annotate', '--quiet']
+    try:
+        resolved = subprocess.run(
+            command, input='torch\n', capture_output=True, encoding='utf-8', errors='replace', check=False
+        )
+    except OSError:
+        return 'auto'
+    return 'cpu' if '+xpu' in resolved.stdout else 'auto'
+
+
+def install_command(config, environ, uv, python, backend=None):
     spec = setting(config, environ, 'SPEC', config['dist'])
     launcher = setting(config, environ, 'LAUNCHER', config['launcher_spec'])
-    torch = ['--torch-backend', setting(config, environ, 'TORCH', 'auto')] if config['torch'] else []
+    torch = ['--torch-backend', backend] if backend else []
     return [str(uv), 'pip', 'install', '--python', str(python), *torch, '--upgrade', 'napari[all]', spec, launcher]
 
 
@@ -241,11 +262,12 @@ def install(config, root, environ, no_desktop=False, extra_setup='ask'):
     extra_setup_now = bool(config['extra_setup_command']) and wants_extra_setup(config, environ, extra_setup)
 
     spec = setting(config, environ, 'SPEC', config['dist'])
-    if config['torch']:
-        say(f'Installing napari and {spec} (PyTorch build: {setting(config, environ, "TORCH", "auto")})')
+    backend = torch_backend(config, environ, uv, python) if config['torch'] else None
+    if backend:
+        say(f'Installing napari and {spec} (PyTorch build: {backend})')
     else:
         say(f'Installing napari and {spec}')
-    run(*install_command(config, environ, uv, python))
+    run(*install_command(config, environ, uv, python, backend))
     if config['torch']:
         run(str(python), '-c', TORCH_CHECK)
 

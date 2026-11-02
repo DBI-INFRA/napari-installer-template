@@ -27,8 +27,8 @@ Each installer downloads a pinned [uv](https://docs.astral.sh/uv/) into a folder
 installs Python in that folder, then napari, the plugin from PyPI and
 [napari-launcher](https://github.com/DBI-INFRA/napari-launcher) into a virtual environment. For
 plugins that need PyTorch, `uv pip install --torch-backend auto` picks the build for the machine's
-GPU: CUDA, ROCm, Apple MPS or CPU. napari-launcher then adds a shortcut that opens napari with the
-plugin's widget docked. Uninstalling deletes the folder and the shortcuts.
+GPU: CUDA, ROCm, Apple MPS or CPU. Intel GPUs get the CPU build unless `<ENV>_TORCH=xpu` is set.
+napari-launcher then adds a shortcut that opens napari with the plugin's widget docked. Uninstalling deletes the folder and the shortcuts.
 
 The plugin needs no code changes, only a release on PyPI. The repository must be public, because
 the install commands download the scripts from `raw.githubusercontent.com`.

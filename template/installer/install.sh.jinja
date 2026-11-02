@@ -16,7 +16,7 @@
 #   [[ env ]]_SPEC      what to install (default: [[ dist ]]),
 #                       e.g. a version pin, a wheel or a git URL
 [% if torch %]
-#   [[ env ]]_TORCH     PyTorch build (default: auto), e.g. cpu, cu128 or rocm6.4
+#   [[ env ]]_TORCH     PyTorch build (default: auto, with cpu for Intel GPUs), e.g. cpu, cu128, rocm6.4 or xpu
 [% endif %]
 #   [[ env ]]_NO_DESKTOP=1  add the app menu entry only, no desktop shortcut
 [% if extra_setup_command %]

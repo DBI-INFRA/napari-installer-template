@@ -153,8 +153,8 @@ jobs:
       - name: Check that napari opens with the widget
         run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/napari-animation/env/bin/python sample/installer/check_install.py
 
-  # CPU PyTorch, the extra setup step, and a shortcut name that is not ASCII, which Windows PowerShell
-  # 5.1 reads correctly only because install.ps1 stays ASCII
+  # The PyTorch build the install picks for itself, the extra setup step, and a shortcut name that is
+  # not ASCII, which Windows PowerShell 5.1 reads correctly only because install.ps1 stays ASCII
   torch-plugin:
     name: PyTorch plugin with extra setup, ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
@@ -164,7 +164,6 @@ jobs:
         platform: [ubuntu-latest, windows-latest]
     env:
       NAPARI_DUMMY_SPEC: ${{ github.workspace }}/tests/fixtures/napari-dummy
-      NAPARI_DUMMY_TORCH: cpu
       NAPARI_DUMMY_EXTRA_SETUP: 1
     steps:
       - uses: actions/checkout@v7.0.1

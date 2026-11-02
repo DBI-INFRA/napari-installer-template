@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import shutil
 import sys
 import urllib.error
 import urllib.request
@@ -37,11 +38,13 @@ FULL = {
     'extra_setup_command': '-m napari_foo fetch-model',
     'extra_setup_desc': 'download the Foo model',
 }
-# records each call as a JSON line in calls.jsonl next to it; fails when FAKE_FAIL is part of its arguments
+# records each call as a JSON line in calls.jsonl next to it; prints FAKE_OUTPUT; fails when FAKE_FAIL is part of
+# its arguments
 FAKE = """#!{python}
 import json, os, sys
 with open({log!r}, 'a') as log:
     log.write(json.dumps([os.path.basename(sys.argv[0]), *sys.argv[1:]]) + '\\n')
+print(os.environ.get('FAKE_OUTPUT', ''), end='')
 fail = os.environ.get('FAKE_FAIL')
 sys.exit(1 if fail and fail in ' '.join(sys.argv[1:]) else 0)
 """
@@ -108,10 +111,70 @@ def test_install_command(step):
 
 
 def test_install_command_torch(step):
-    command = step.install_command(FULL, {}, 'uv', 'python')
+    command = step.install_command(FULL, {}, 'uv', 'python', 'auto')
     assert command[5:9] == ['--torch-backend', 'auto', '--upgrade', 'napari[all]']
-    command = step.install_command(FULL, {'NAPARI_FOO_TORCH': 'cpu', 'NAPARI_FOO_SPEC': ''}, 'uv', 'python')
+    command = step.install_command(FULL, {'NAPARI_FOO_SPEC': ''}, 'uv', 'python', 'cpu')
     assert command[5:7] == ['--torch-backend', 'cpu'] and 'napari-foo' in command
+
+
+@pytest.mark.parametrize(
+    ('resolved', 'expected'),
+    [
+        ('torch==2.15.0+xpu', 'cpu'),
+        ('torch==2.15.0+cu128', 'auto'),
+        ('torch==2.15.0+rocm6.4', 'auto'),
+        ('torch==2.15.0+cpu', 'auto'),
+        ('torch==2.15.0', 'auto'),
+    ],
+)
+def test_torch_backend_replaces_xpu(step, root, monkeypatch, resolved, expected):
+    monkeypatch.setenv('FAKE_OUTPUT', resolved)
+    python = root / 'env/bin/python'
+    assert step.torch_backend(FULL, {}, root / 'bin/uv', python) == expected
+    assert calls(root) == [
+        [
+            *('uv', 'pip', 'compile', '-', '--python', str(python), '--torch-backend', 'auto'),
+            *('--no-deps', '--no-header', '--no-annotate', '--quiet'),
+        ]
+    ]
+
+
+def test_torch_backend_auto_is_the_default(step, root, monkeypatch):
+    monkeypatch.setenv('FAKE_OUTPUT', 'torch==2.15.0+xpu')
+    assert step.torch_backend(FULL, {'NAPARI_FOO_TORCH': 'auto'}, root / 'bin/uv', 'python') == 'cpu'
+
+
+@pytest.mark.parametrize('chosen', ['xpu', 'cpu', 'cu128'])
+def test_torch_backend_setting_wins(step, root, chosen):
+    assert step.torch_backend(FULL, {'NAPARI_FOO_TORCH': chosen}, root / 'bin/uv', 'python') == chosen
+    assert calls(root) == []
+
+
+def test_torch_backend_leaves_failures_to_uv(step, root, tmp_path, monkeypatch):
+    assert step.torch_backend(FULL, {}, tmp_path / 'no-uv', 'python') == 'auto'
+    monkeypatch.setenv('FAKE_FAIL', 'pip compile')
+    assert step.torch_backend(FULL, {}, root / 'bin/uv', 'python') == 'auto'
+
+
+def test_torch_backend_reads_real_uv(step, tmp_path, monkeypatch):
+    """real uv, with XPU in place of what it detects here, so that its output for XPU is the one the check expects"""
+    real = shutil.which('uv')
+    if not real:
+        pytest.skip('no uv')
+    try:
+        urllib.request.urlopen('https://download.pytorch.org/whl/xpu/torch/', timeout=30).close()
+    except (urllib.error.URLError, TimeoutError) as e:
+        pytest.skip(f'no network: {e}')
+    uv = tmp_path / 'uv'
+    uv.write_text(
+        f'#!{sys.executable}\n'
+        'import os, sys\n'
+        'arguments = ["xpu" if argument == "auto" else argument for argument in sys.argv[1:]]\n'
+        f'os.execv({real!r}, [{real!r}, *arguments, "--python-platform", "linux"])\n'
+    )
+    uv.chmod(0o755)
+    monkeypatch.setenv('UV_NO_CONFIG', '1')
+    assert step.torch_backend(FULL, {}, uv, sys.executable) == 'cpu'
 
 
 def test_shortcut_command(step):
@@ -228,6 +291,15 @@ def test_install_torch_and_extra_setup(step, root, capsys):
     output = capsys.readouterr().out
     assert '==> Installing napari and napari-foo (PyTorch build: cpu)\n' in output
     assert '==> Download the Foo model\n' in output
+
+
+def test_install_replaces_xpu(step, root, monkeypatch, capsys):
+    monkeypatch.setenv('FAKE_OUTPUT', 'torch==2.15.0+xpu')
+    step.install(FULL, root, {'NAPARI_FOO_EXTRA_SETUP': '0'})
+    made = calls(root)
+    assert made[0][:3] == ['uv', 'pip', 'compile']
+    assert made[1][:3] == ['uv', 'pip', 'install'] and made[1][5:7] == ['--torch-backend', 'cpu']
+    assert '==> Installing napari and napari-foo (PyTorch build: cpu)\n' in capsys.readouterr().out
 
 
 def test_install_extra_setup_declined(step, root):
