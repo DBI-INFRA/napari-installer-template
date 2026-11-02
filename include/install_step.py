@@ -141,7 +141,9 @@ def install_command(config, environ, uv, python, backend=None):
     spec = setting(config, environ, 'SPEC', config['dist'])
     launcher = setting(config, environ, 'LAUNCHER', config['launcher_spec'])
     torch = ['--torch-backend', backend] if backend else []
-    return [str(uv), 'pip', 'install', '--python', str(python), *torch, '--upgrade', 'napari[all]', spec, launcher]
+    # --compile-bytecode: the first launch does not have to do it
+    options = ['--upgrade', '--compile-bytecode']
+    return [str(uv), 'pip', 'install', '--python', str(python), *torch, *options, 'napari[all]', spec, launcher]
 
 
 def shortcut_command(config, environ, python, no_desktop=False):

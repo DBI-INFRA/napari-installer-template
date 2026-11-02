@@ -97,6 +97,7 @@ def test_install_command(step):
         '--python',
         str(python),
         '--upgrade',
+        '--compile-bytecode',
         'napari[all]',
         'napari-foo',
         'napari-launcher>=0.1,<0.2',
@@ -112,7 +113,7 @@ def test_install_command(step):
 
 def test_install_command_torch(step):
     command = step.install_command(FULL, {}, 'uv', 'python', 'auto')
-    assert command[5:9] == ['--torch-backend', 'auto', '--upgrade', 'napari[all]']
+    assert command[5:10] == ['--torch-backend', 'auto', '--upgrade', '--compile-bytecode', 'napari[all]']
     command = step.install_command(FULL, {'NAPARI_FOO_SPEC': ''}, 'uv', 'python', 'cpu')
     assert command[5:7] == ['--torch-backend', 'cpu'] and 'napari-foo' in command
 
