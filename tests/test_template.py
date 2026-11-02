@@ -370,9 +370,10 @@ def test_sh_install_runs_step(tmp_path):
     calls = logged(log)
     assert calls[0][:3] == ['uv', 'python', 'install'] and calls[1][:2] == ['uv', 'venv']
     assert calls[2] == ['-I', '-u', str(root / 'install-step.py'), 'install']
-    assert calls[3][:6] == ['uv', 'pip', 'install', '--python', str(root / 'env/bin/python'), '--torch-backend']
-    assert calls[5][:5] == ['-m', 'napari_launcher', 'shortcut', 'add', '--name']
-    assert len(calls) == 6
+    assert calls[3][:3] == ['uv', 'pip', 'compile']
+    assert calls[4][:6] == ['uv', 'pip', 'install', '--python', str(root / 'env/bin/python'), '--torch-backend']
+    assert calls[6][:5] == ['-m', 'napari_launcher', 'shortcut', 'add', '--name']
+    assert len(calls) == 7
     assert '==> Done. Start Foo App from the shortcut, or run:' in run.stdout
     assert not (root / 'install-step.py').exists() and (root / '.napari-foo-install').exists()
 

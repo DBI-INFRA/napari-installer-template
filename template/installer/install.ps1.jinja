@@ -22,7 +22,7 @@
 #   [[ env ]]_SPEC      what to install (default: [[ dist ]]),
 #                       e.g. a version pin, a wheel or a git URL
 [% if torch %]
-#   [[ env ]]_TORCH     PyTorch build (default: auto), e.g. cpu or cu128
+#   [[ env ]]_TORCH     PyTorch build (default: auto, with cpu for Intel GPUs), e.g. cpu, cu128 or xpu
 [% endif %]
 #   [[ env ]]_NO_DESKTOP=1  add the Start menu entry only, no desktop shortcut (or -NoDesktop)
 [% if extra_setup_command %]

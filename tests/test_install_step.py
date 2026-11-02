@@ -3,6 +3,8 @@
 import importlib.util
 import io
 import json
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -37,11 +39,13 @@ FULL = {
     'extra_setup_command': '-m napari_foo fetch-model',
     'extra_setup_desc': 'download the Foo model',
 }
-# records each call as a JSON line in calls.jsonl next to it; fails when FAKE_FAIL is part of its arguments
+# records each call as a JSON line in calls.jsonl next to it; prints FAKE_OUTPUT; fails when FAKE_FAIL is part of
+# its arguments
 FAKE = """#!{python}
 import json, os, sys
 with open({log!r}, 'a') as log:
     log.write(json.dumps([os.path.basename(sys.argv[0]), *sys.argv[1:]]) + '\\n')
+print(os.environ.get('FAKE_OUTPUT', ''), end='')
 fail = os.environ.get('FAKE_FAIL')
 sys.exit(1 if fail and fail in ' '.join(sys.argv[1:]) else 0)
 """
@@ -94,6 +98,7 @@ def test_install_command(step):
         '--python',
         str(python),
         '--upgrade',
+        '--compile-bytecode',
         'napari[all]',
         'napari-foo',
         'napari-launcher>=0.1,<0.2',
@@ -108,10 +113,155 @@ def test_install_command(step):
 
 
 def test_install_command_torch(step):
-    command = step.install_command(FULL, {}, 'uv', 'python')
-    assert command[5:9] == ['--torch-backend', 'auto', '--upgrade', 'napari[all]']
-    command = step.install_command(FULL, {'NAPARI_FOO_TORCH': 'cpu', 'NAPARI_FOO_SPEC': ''}, 'uv', 'python')
+    command = step.install_command(FULL, {}, 'uv', 'python', 'auto')
+    assert command[5:10] == ['--torch-backend', 'auto', '--upgrade', '--compile-bytecode', 'napari[all]']
+    command = step.install_command(FULL, {'NAPARI_FOO_SPEC': ''}, 'uv', 'python', 'cpu')
     assert command[5:7] == ['--torch-backend', 'cpu'] and 'napari-foo' in command
+
+
+@pytest.mark.parametrize(
+    ('resolved', 'expected'),
+    [
+        ('torch==2.15.0+xpu', 'cpu'),
+        ('torch==2.15.0+cu128', 'auto'),
+        ('torch==2.15.0+rocm6.4', 'auto'),
+        ('torch==2.15.0+cpu', 'auto'),
+        ('torch==2.15.0', 'auto'),
+    ],
+)
+def test_torch_backend_replaces_xpu(step, root, monkeypatch, resolved, expected):
+    monkeypatch.setenv('FAKE_OUTPUT', resolved)
+    python = root / 'env/bin/python'
+    assert step.torch_backend(FULL, {}, root / 'bin/uv', python) == expected
+    assert calls(root) == [
+        [
+            *('uv', 'pip', 'compile', '-', '--python', str(python), '--torch-backend', 'auto'),
+            *('--no-deps', '--no-header', '--no-annotate', '--quiet'),
+        ]
+    ]
+
+
+def test_torch_backend_auto_is_the_default(step, root, monkeypatch):
+    monkeypatch.setenv('FAKE_OUTPUT', 'torch==2.15.0+xpu')
+    assert step.torch_backend(FULL, {'NAPARI_FOO_TORCH': 'auto'}, root / 'bin/uv', 'python') == 'cpu'
+
+
+@pytest.mark.parametrize('chosen', ['xpu', 'cpu', 'cu128'])
+def test_torch_backend_setting_wins(step, root, chosen):
+    assert step.torch_backend(FULL, {'NAPARI_FOO_TORCH': chosen}, root / 'bin/uv', 'python') == chosen
+    assert calls(root) == []
+
+
+def test_torch_backend_leaves_failures_to_uv(step, root, tmp_path, monkeypatch):
+    assert step.torch_backend(FULL, {}, tmp_path / 'no-uv', 'python') == 'auto'
+    monkeypatch.setenv('FAKE_FAIL', 'pip compile')
+    assert step.torch_backend(FULL, {}, root / 'bin/uv', 'python') == 'auto'
+
+
+def test_torch_backend_reads_real_uv(step, tmp_path, monkeypatch):
+    """real uv, with XPU in place of what it detects here, so that its output for XPU is the one the check expects"""
+    real = shutil.which('uv')
+    if not real:
+        pytest.skip('no uv')
+    try:
+        urllib.request.urlopen('https://download.pytorch.org/whl/xpu/torch/', timeout=30).close()
+    except (urllib.error.URLError, TimeoutError) as e:
+        pytest.skip(f'no network: {e}')
+    uv = tmp_path / 'uv'
+    uv.write_text(
+        f'#!{sys.executable}\n'
+        'import os, sys\n'
+        'arguments = ["xpu" if argument == "auto" else argument for argument in sys.argv[1:]]\n'
+        f'os.execv({real!r}, [{real!r}, *arguments, "--python-platform", "linux"])\n'
+    )
+    uv.chmod(0o755)
+    monkeypatch.setenv('UV_NO_CONFIG', '1')
+    assert step.torch_backend(FULL, {}, uv, sys.executable) == 'cpu'
+
+
+@pytest.fixture
+def vc_runtime(step, tmp_path, monkeypatch):
+    """a fake uv that unpacks a fake msvc-runtime, an empty System32 and the folder of the base Python"""
+    uv = tmp_path / 'uv'
+    names = [*step.VC_RUNTIME, 'msvc_runtime.pyd']
+    uv.write_text(
+        f'#!{sys.executable}\n'
+        'import pathlib, sys\n'
+        "target = pathlib.Path(sys.argv[sys.argv.index('--target') + 1])\n"
+        f'for name in {names!r}:\n'
+        "    (target / name).write_text('dll')\n"
+    )
+    uv.chmod(0o755)
+    (tmp_path / 'windows/System32').mkdir(parents=True)
+    base = tmp_path / 'base'
+    base.mkdir()
+    monkeypatch.setattr(sys, 'base_prefix', str(base))
+    monkeypatch.setattr(step, 'microsoft_signed', lambda folder: True)
+    return uv, {'SystemRoot': str(tmp_path / 'windows')}, base
+
+
+def test_vc_runtime_in_system32(step, vc_runtime, tmp_path, capsys):
+    uv, environ, base = vc_runtime
+    for name in step.VC_RUNTIME:
+        (tmp_path / 'windows/System32' / name).touch()
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert list(base.iterdir()) == []
+    assert capsys.readouterr().out == ''
+
+
+def test_vc_runtime_partly_missing(step, vc_runtime, tmp_path, capsys):
+    uv, environ, base = vc_runtime
+    (tmp_path / 'windows/System32/msvcp140.dll').touch()
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert sorted(path.name for path in base.iterdir()) == sorted(step.VC_RUNTIME)
+    assert capsys.readouterr().out == '==> Adding the Visual C++ runtime\n'
+    assert list(tmp_path.glob('tmp*')) == []
+
+
+def test_vc_runtime_not_signed(step, vc_runtime, tmp_path, monkeypatch, capsys):
+    uv, environ, base = vc_runtime
+    monkeypatch.setattr(step, 'microsoft_signed', lambda folder: False)
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert list(base.iterdir()) == []
+    assert 'not signed by Microsoft' in capsys.readouterr().out
+
+
+def test_vc_runtime_incomplete(step, vc_runtime, tmp_path, monkeypatch, capsys):
+    uv, environ, base = vc_runtime
+    monkeypatch.setattr(step, 'VC_RUNTIME', (*step.VC_RUNTIME, 'other.dll'))
+    step.add_vc_runtime(uv, 'python', tmp_path, environ)
+    assert list(base.iterdir()) == []
+    assert 'lacks part of the runtime' in capsys.readouterr().out
+
+
+def test_vc_runtime_download_fails(step, vc_runtime, root, monkeypatch, capsys):
+    _, environ, base = vc_runtime
+    monkeypatch.setenv('FAKE_FAIL', 'msvc-runtime')
+    step.add_vc_runtime(root / 'bin/uv', 'python', root, environ)
+    assert list(base.iterdir()) == []
+    assert step.VC_RUNTIME_URL in capsys.readouterr().out
+
+
+def test_vc_runtime_comes_before_the_torch_check(step, root, monkeypatch):
+    fake(root / 'env/Scripts/python.exe', root.parent / 'calls.jsonl')
+    fake(root / 'bin/uv.exe', root.parent / 'calls.jsonl')
+    monkeypatch.setattr(step, 'WINDOWS', True)
+    seen = []
+    monkeypatch.setattr(step, 'add_vc_runtime', lambda *args: seen.append([call[:2] for call in calls(root)]))
+    step.install(FULL, root, {'NAPARI_FOO_TORCH': 'cpu', 'NAPARI_FOO_EXTRA_SETUP': '0'})
+    assert seen == [[['uv.exe', 'pip']]]
+    assert calls(root)[1][:2] == ['python.exe', '-c']
+
+
+def test_msvc_runtime_has_the_vc_runtime(step, tmp_path):
+    uv = shutil.which('uv')
+    if uv is None:
+        pytest.skip('no uv')
+    command = [uv, 'pip', 'install', '--quiet', '--target', str(tmp_path), '--no-deps', 'msvc-runtime']
+    command += ['--python-platform', 'windows', '--python-version', '3.12']
+    if subprocess.run(command, check=False, capture_output=True).returncode:
+        pytest.skip('no network')
+    assert set(step.VC_RUNTIME) <= {path.name for path in tmp_path.glob('*.dll')}
 
 
 def test_shortcut_command(step):
@@ -228,6 +378,15 @@ def test_install_torch_and_extra_setup(step, root, capsys):
     output = capsys.readouterr().out
     assert '==> Installing napari and napari-foo (PyTorch build: cpu)\n' in output
     assert '==> Download the Foo model\n' in output
+
+
+def test_install_replaces_xpu(step, root, monkeypatch, capsys):
+    monkeypatch.setenv('FAKE_OUTPUT', 'torch==2.15.0+xpu')
+    step.install(FULL, root, {'NAPARI_FOO_EXTRA_SETUP': '0'})
+    made = calls(root)
+    assert made[0][:3] == ['uv', 'pip', 'compile']
+    assert made[1][:3] == ['uv', 'pip', 'install'] and made[1][5:7] == ['--torch-backend', 'cpu']
+    assert '==> Installing napari and napari-foo (PyTorch build: cpu)\n' in capsys.readouterr().out
 
 
 def test_install_extra_setup_declined(step, root):

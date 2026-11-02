@@ -153,8 +153,8 @@ jobs:
       - name: Check that napari opens with the widget
         run: xvfb-run -a -s "-screen 0 1280x1024x24" ~/.local/share/napari-animation/env/bin/python sample/installer/check_install.py
 
-  # CPU PyTorch, the extra setup step, and a shortcut name that is not ASCII, which Windows PowerShell
-  # 5.1 reads correctly only because install.ps1 stays ASCII
+  # The PyTorch build the install picks for itself, the extra setup step, and a shortcut name that is
+  # not ASCII, which Windows PowerShell 5.1 reads correctly only because install.ps1 stays ASCII
   torch-plugin:
     name: PyTorch plugin with extra setup, ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
@@ -164,7 +164,6 @@ jobs:
         platform: [ubuntu-latest, windows-latest]
     env:
       NAPARI_DUMMY_SPEC: ${{ github.workspace }}/tests/fixtures/napari-dummy
-      NAPARI_DUMMY_TORCH: cpu
       NAPARI_DUMMY_EXTRA_SETUP: 1
     steps:
       - uses: actions/checkout@v7.0.1
@@ -205,6 +204,9 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File dummy/installer/install.ps1
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path "$env:NAPARI_DUMMY_HOME\env\napari-dummy-model.pt")) { throw 'the extra setup step did not run' }
+          # the runner has the Visual C++ runtime, so the install adds no copy of its own
+          $base = & "$env:NAPARI_DUMMY_HOME\env\Scripts\python.exe" -c 'import sys; print(sys.base_prefix)'
+          if (Test-Path "$base\msvcp140.dll") { throw 'the install added the Visual C++ runtime without need' }
           # the name from its character code, so the check does not depend on how this step is read
           $lnk = "Zellz$([char]0xE4)hlung.lnk"
           foreach ($folder in 'Programs', 'Desktop') {
@@ -236,6 +238,58 @@ jobs:
           if (Test-Path $env:NAPARI_DUMMY_HOME) { throw 'install folder is still there' }
           $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Zellz$([char]0xE4)hlung.lnk"
           if (Test-Path -LiteralPath $lnk) { throw 'desktop shortcut is still there' }
+
+  # Some computers lack the Visual C++ runtime, which the runner images have, so the install adds its own.
+  # Windows PowerShell, uv and the install's Python do not need the DLLs that this job takes away.
+  windows-no-vc-runtime:
+    name: install script, no Visual C++ runtime
+    runs-on: windows-latest
+    env:
+      NAPARI_DUMMY_SPEC: ${{ github.workspace }}/tests/fixtures/napari-dummy
+      NAPARI_DUMMY_EXTRA_SETUP: 0
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Render the template
+        shell: bash
+        run: |
+          # shellcheck disable=SC2086  # split into its arguments
+          uvx $RENDER_DUMMY
+          echo "NAPARI_DUMMY_HOME=$RUNNER_TEMP/plugin-install" >> "$GITHUB_ENV"
+
+      - name: Take the Visual C++ runtime out of System32
+        shell: powershell
+        run: |
+          $system = "$env:SystemRoot\System32"
+          foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll',
+                  'msvcp140_codecvt_ids.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcruntime140_threads.dll',
+                  'vcomp140.dll', 'concrt140.dll') {
+              $path = Join-Path $system $name
+              if (-not (Test-Path -LiteralPath $path)) { Write-Host "$name is not there"; continue }
+              takeown /f $path | Out-Null
+              icacls $path /grant "${env:USERNAME}:F" | Out-Null
+              Rename-Item -LiteralPath $path "$name.removed"
+          }
+          if (Test-Path "$system\msvcp140.dll") { throw 'msvcp140.dll is still in System32' }
+
+      - name: Install
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File dummy/installer/install.ps1
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit code $LASTEXITCODE" }
+
+      - name: Check where the runtime comes from, with PyTorch first and with Qt first
+        shell: powershell
+        run: |
+          $python = "$env:NAPARI_DUMMY_HOME\env\Scripts\python.exe"
+          & $python tests/fixtures/check_vc_runtime.py torch PyQt6.QtWidgets
+          if ($LASTEXITCODE -ne 0) { throw 'wrong runtime with PyTorch first' }
+          & $python tests/fixtures/check_vc_runtime.py PyQt6.QtWidgets torch
+          if ($LASTEXITCODE -ne 0) { throw 'wrong runtime with Qt first' }
 
   # the dummy plugin again, with the extra setup step chosen as a setup task
   windows-setup:
