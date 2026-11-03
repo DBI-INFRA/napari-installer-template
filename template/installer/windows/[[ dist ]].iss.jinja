@@ -113,6 +113,12 @@ begin
     if not Exec('powershell.exe', Params, '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
       ResultCode := -1;
     InstallExitCode := ResultCode;
+    { install.ps1 goes on without the desktop shortcut when Windows does not let it write to the desktop }
+    if (ResultCode = 0) and WizardIsTaskSelected('desktopicon') and
+      (not FileExists(ExpandConstant('{userdesktop}\{#AppName}.lnk'))) then
+      SuppressibleMsgBox('Windows did not let the setup add a desktop shortcut. ' +
+        'Start {#AppName} from the Start menu instead.' + #13#10#13#10 +
+        'Controlled folder access in Windows Security can block shortcuts on the desktop.', mbInformation, MB_OK, IDOK);
     { install.ps1 writes why it stopped to install.log: a failed download, or shortcuts it could not add }
     if ResultCode <> 0 then
       SuppressibleMsgBox('Installing {#AppName} did not finish (exit code ' + IntToStr(ResultCode) + ').' + #13#10#13#10 +

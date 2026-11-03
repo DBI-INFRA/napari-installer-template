@@ -40,14 +40,15 @@ FULL = {
     'extra_setup_desc': 'download the Foo model',
 }
 # records each call as a JSON line in calls.jsonl next to it; prints FAKE_OUTPUT; fails when FAKE_FAIL is part of
-# its arguments
+# its arguments, unless FAKE_PASS is too
 FAKE = """#!{python}
 import json, os, sys
 with open({log!r}, 'a') as log:
     log.write(json.dumps([os.path.basename(sys.argv[0]), *sys.argv[1:]]) + '\\n')
 print(os.environ.get('FAKE_OUTPUT', ''), end='')
-fail = os.environ.get('FAKE_FAIL')
-sys.exit(1 if fail and fail in ' '.join(sys.argv[1:]) else 0)
+args = ' '.join(sys.argv[1:])
+fail, keep = os.environ.get('FAKE_FAIL'), os.environ.get('FAKE_PASS')
+sys.exit(1 if fail and fail in args and not (keep and keep in args) else 0)
 """
 
 
@@ -416,6 +417,43 @@ def test_shortcut_fails(step, root, monkeypatch):
     assert calls(root)[-1][3:5] == ['shortcut', 'add']
 
 
+def test_desktop_shortcut_blocked(step, root, monkeypatch, capsys):
+    monkeypatch.setenv('FAKE_FAIL', 'shortcut add')
+    monkeypatch.setenv('FAKE_PASS', '--no-desktop')
+    step.install(FULL, root, {}, extra_setup='yes')
+    made = calls(root)
+    assert '--no-desktop' not in made[-3] and '--no-desktop' in made[-2]
+    assert made[-1] == ['python', '-m', 'napari_foo', 'fetch-model']
+    output = capsys.readouterr().out
+    assert f'==> Could not add the desktop shortcut (see above). Start Foo App from {step.MENU} instead.\n' in output
+
+
+def test_desktop_shortcut_blocked_windows(step, root, monkeypatch, capsys):
+    monkeypatch.setattr(step, 'WINDOWS', True)
+    monkeypatch.setenv('FAKE_FAIL', 'shortcut add')
+    monkeypatch.setenv('FAKE_PASS', '--no-desktop')
+    assert step.add_shortcuts(CONFIG, {}, str(root / 'env/bin/python')) is False
+    assert capsys.readouterr().out == (
+        'Could not add the desktop shortcut (see above). Windows security settings such as Controlled folder '
+        'access can block it. Start napari-foo from the Start menu instead.\n'
+    )
+
+
+def test_menu_shortcut_fails_without_desktop(step, root, monkeypatch):
+    monkeypatch.setenv('FAKE_FAIL', 'shortcut add')
+    with pytest.raises(step.Failed, match='the shortcuts are not'):
+        step.install(CONFIG, root, {}, no_desktop=True)
+    # no second try when there was no desktop shortcut to leave out
+    assert [call[3:5] for call in calls(root)].count(['shortcut', 'add']) == 1
+
+
+def test_add_shortcuts(step, root):
+    python = str(root / 'env/bin/python')
+    assert step.add_shortcuts(CONFIG, {}, python) is True
+    assert step.add_shortcuts(CONFIG, {}, python, no_desktop=True) is False
+    assert step.add_shortcuts(CONFIG, {'NAPARI_FOO_NO_DESKTOP': '1'}, python) is False
+
+
 def test_summary(step):
     python = Path('/home/me/.local/share/napari-foo/env/bin/python')
     assert step.summary(FULL, python) == [
@@ -434,6 +472,7 @@ def test_summary_windows(step, monkeypatch):
         'Done. Start Foo App from the Start menu or desktop shortcut, or run:',
         f'    & "{python}" -m napari_launcher launch -w napari-foo \'Foo widget\'',
     ]
+    assert step.summary(FULL, python, desktop=False)[0] == 'Done. Start Foo App from the Start menu, or run:'
 
 
 def test_uninstall(step, root, monkeypatch, capsys):
