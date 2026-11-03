@@ -50,6 +50,8 @@ The installer offers to [[ extra_setup_desc ]] as part of the installation: tick
 ### Where it goes
 
 Everything goes into one folder: `%LOCALAPPDATA%\[[ dist ]]` on Windows, and `~/.local/share/[[ dist ]]` on macOS and Linux.
+The Windows setup asks for this folder on the first install, so you can put it on another drive, such as D:.
+Choose a new or empty folder on a drive of this computer that uses NTFS, because uninstalling deletes the whole folder.
 [% if torch %]
 With PyTorch, this folder can take several GB of disk space.
 [% endif %]
@@ -58,6 +60,8 @@ With PyTorch, this folder can take several GB of disk space.
 
 Start napari with the "[[ app_name ]]" shortcut.
 It is on your desktop, and also in the Start menu on Windows, in the Applications folder of your home folder on macOS, and in the app menu on Linux.
+Some Windows computers do not let programs add desktop shortcuts, such as when Windows Security has Controlled folder access on.
+The installer then adds the Start menu shortcut only.
 napari opens with [[ dist ]] ready to use. The first start can be slow; later starts are quicker.
 
 ### Update

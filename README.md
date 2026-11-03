@@ -19,7 +19,7 @@ developers here.
 
 | Platform | User runs | Gets |
 |---|---|---|
-| Windows | `<dist>-setup.exe` from the GitHub release, or a PowerShell one-liner | Start menu and desktop shortcuts; the setup also adds an entry in Settings > Apps |
+| Windows | `<dist>-setup.exe` from the GitHub release, or a PowerShell one-liner | Start menu and desktop shortcuts; the setup also asks for the install folder and adds an entry in Settings > Apps |
 | macOS | `curl … install.sh \| sh` | `~/Applications/<name>.app` and a link to it on the desktop |
 | Linux | `curl … install.sh \| sh`, or the same with `wget` | an app menu entry and a desktop shortcut |
 

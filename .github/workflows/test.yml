@@ -369,6 +369,20 @@ jobs:
           }
           iscc /DAppVersion=1.0 sample/installer/windows/napari-animation.iss
 
+      # uninstalling deletes the install folder, so the setup refuses one that has other files in it
+      - name: Refuse a folder with other files in it
+        shell: pwsh
+        run: |
+          $work = 'C:\setup-test'
+          New-Item -ItemType Directory $work | Out-Null
+          Set-Content "$work\keep.txt" 'not from the setup'
+          $setup = Start-Process sample/installer/windows/Output/napari-animation-setup.exe -Wait -PassThru `
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$work", '/LOG=refused.log'
+          Get-Content refused.log -Tail 5
+          if ($setup.ExitCode -eq 0) { throw 'the setup installed into a folder with other files in it' }
+          if (Test-Path "$work\.napari-animation-install") { throw 'the setup marked the folder as its own' }
+
+      # into a folder outside the user profile, with a space in its name
       - name: Run the setup silently as a new user
         shell: pwsh
         run: |
@@ -377,9 +391,8 @@ jobs:
           net user setup-test $password /add | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'could not add the user' }
           $credential = [pscredential]::new('setup-test', (ConvertTo-SecureString $password -AsPlainText -Force))
-          # a folder the new user can write its log to
+          # a folder the new user can write its log and the install to
           $work = 'C:\setup-test'
-          New-Item -ItemType Directory $work | Out-Null
           icacls $work /grant 'Users:(OI)(CI)M' | Out-Null
           Copy-Item sample/installer/windows/Output/napari-animation-setup.exe $work
           Start-Service seclogon
@@ -394,9 +407,10 @@ jobs:
           $env:TEMP = $env:TMP = (New-Item -ItemType Directory "$work\temp").FullName
           $setup = Start-Process "$work\napari-animation-setup.exe" -Credential $credential -LoadUserProfile `
               -WorkingDirectory $work -Wait -PassThru `
-              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$work\setup.log"
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$work\setup.log", `
+                  "/DIR=`"$work\napari animation`""
           Get-Content "$work\setup.log" -Tail 20 -ErrorAction Continue
-          $root = "$userHome\AppData\Local\napari-animation"
+          $root = "$work\napari animation"
           if ($setup.ExitCode -ne 0) {
               Get-Content "$root\install.log" -ErrorAction SilentlyContinue
               throw "setup failed with exit code $($setup.ExitCode)"
