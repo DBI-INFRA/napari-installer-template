@@ -50,6 +50,8 @@ The installer offers to [[ extra_setup_desc ]] as part of the installation: tick
 ### Where it goes
 
 Everything goes into one folder: `%LOCALAPPDATA%\[[ dist ]]` on Windows, and `~/.local/share/[[ dist ]]` on macOS and Linux.
+The Windows setup asks for this folder on the first install, so you can put it on another drive, such as D:.
+Choose a new or empty folder on a drive of this computer that uses NTFS, because uninstalling deletes the whole folder.
 [% if torch %]
 With PyTorch, this folder can take several GB of disk space.
 [% endif %]
