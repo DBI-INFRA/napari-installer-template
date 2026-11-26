@@ -100,9 +100,9 @@ variables.
 
 ```bash
 H=$(mktemp -d)
-HOME=$H <ENV>_SPEC=$PWD sh installer/install.sh                        # installs this checkout
-HOME=$H $H/.local/share/<dist>/env/bin/python installer/check_install.py  # opens a window briefly
-HOME=$H sh installer/install.sh --uninstall
+HOME=$H XDG_DATA_HOME=$H/.local/share <ENV>_SPEC=$PWD sh installer/install.sh   # installs this checkout
+HOME=$H XDG_DATA_HOME=$H/.local/share $H/.local/share/<dist>/env/bin/python installer/check_install.py
+HOME=$H XDG_DATA_HOME=$H/.local/share sh installer/install.sh --uninstall
 ```
 
 ## Not covered

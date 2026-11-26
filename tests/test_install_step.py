@@ -460,9 +460,11 @@ def test_summary(step):
         'Done. Start Foo App from the shortcut, or run:',
         f'    "{python}" -m napari_launcher launch -w napari-foo "Foo widget"',
         'To uninstall:',
-        '    curl -LsSf https://raw.githubusercontent.com/someone/napari-foo/main/installer/install.sh | sh -s -- --uninstall',
+        '    curl -LsSf https://raw.githubusercontent.com/someone/napari-foo/main/installer/install.sh | NAPARI_FOO_HOME=/home/me/.local/share/napari-foo sh -s -- --uninstall',
     ]
     assert step.summary(CONFIG, python)[1] == f'    "{python}" -m napari_launcher launch -w napari-foo'
+    spaced = Path('/home/me/my apps/foo/env/bin/python')
+    assert step.summary(CONFIG, spaced)[3].endswith("| NAPARI_FOO_HOME='/home/me/my apps/foo' sh -s -- --uninstall")
 
 
 def test_summary_windows(step, monkeypatch):

@@ -12,6 +12,7 @@ import argparse
 import ctypes.util
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -350,11 +351,13 @@ def summary(config, python, desktop=True):
             f'    & "{python}" -m napari_launcher launch -w {config["plugin"]}{widget}',
         ]
     url = f'https://raw.githubusercontent.com/{config["repo"]}/{config["branch"]}/installer/install.sh'
+    # the install folder, root/env/bin/python, which install.sh may have taken from <ENV>_HOME or XDG_DATA_HOME
+    root = shlex.quote(str(Path(python).parents[2]))
     return [
         f'Done. Start {config["app_name"]} from the shortcut, or run:',
         f'    "{python}" -m napari_launcher launch -w {config["plugin"]}{widget}',
         'To uninstall:',
-        f'    curl -LsSf {url} | sh -s -- --uninstall',
+        f'    curl -LsSf {url} | {config["env"]}_HOME={root} sh -s -- --uninstall',
     ]
 
 
