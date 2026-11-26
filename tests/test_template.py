@@ -205,6 +205,13 @@ def test_full_script_values(tmp_path):
     assert 'napari-launcher shortcut add -w napari-foo "Foo widget" --name "Foo App"' in readme
 
 
+def test_workflow_takes_shortcut_names_literally(tmp_path):
+    workflow = (render(tmp_path, **{**BASE, 'app_name': 'Foo [beta]'}) / SCRIPTS[5]).read_text()
+    checks = [line for line in workflow.splitlines() if 'Foo [beta].lnk' in line]
+    # Test-Path without -LiteralPath reads [beta] as a wildcard and never finds the shortcut
+    assert len(checks) == 3 and all('Test-Path -LiteralPath' in line for line in checks)
+
+
 def test_app_id_is_stable(tmp_path):
     first = (render(tmp_path / 'a', **BASE) / SCRIPTS[2]).read_text()
     second = (render(tmp_path / 'b', **BASE) / SCRIPTS[2]).read_text()

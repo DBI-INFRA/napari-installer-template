@@ -103,7 +103,7 @@ jobs:
         run: |
           ./installer/install.ps1 -Uninstall
           if (Test-Path $env:[[ env ]]_HOME) { throw 'install folder is still there' }
-          if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\[[ app_name ]].lnk") { throw 'desktop shortcut is still there' }
+          if (Test-Path -LiteralPath "$([Environment]::GetFolderPath('Desktop'))\[[ app_name ]].lnk") { throw 'desktop shortcut is still there' }
 
   # The runner images have libxcb-cursor0; a fresh Ubuntu desktop does not, so the script adds it.
   # Ubuntu also comes without curl, so the script downloads uv with wget.
@@ -173,7 +173,7 @@ jobs:
           }
           & "$env:LOCALAPPDATA\[[ dist ]]\env\Scripts\python.exe" -c "import napari, napari_launcher"
           if ($LASTEXITCODE -ne 0) { throw 'the installed environment does not work' }
-          if (-not (Test-Path "$([Environment]::GetFolderPath('Desktop'))\[[ app_name ]].lnk")) { throw 'no desktop shortcut' }
+          if (-not (Test-Path -LiteralPath "$([Environment]::GetFolderPath('Desktop'))\[[ app_name ]].lnk")) { throw 'no desktop shortcut' }
 
       - name: Uninstall silently
         shell: pwsh
@@ -182,7 +182,7 @@ jobs:
           # the uninstaller finishes deleting itself in the background
           for ($i = 0; ($i -lt 60) -and (Test-Path "$env:LOCALAPPDATA\[[ dist ]]"); $i++) { Start-Sleep 1 }
           if (Test-Path "$env:LOCALAPPDATA\[[ dist ]]") { throw 'install folder is still there' }
-          if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\[[ app_name ]].lnk") { throw 'desktop shortcut is still there' }
+          if (Test-Path -LiteralPath "$([Environment]::GetFolderPath('Desktop'))\[[ app_name ]].lnk") { throw 'desktop shortcut is still there' }
 
       - uses: actions/upload-artifact@v7
         with:
